@@ -1,5 +1,5 @@
 import { db } from "@/lib/firebase";
-import { collection, addDoc, serverTimestamp, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, getDocs, query, orderBy, getCountFromServer, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { Program } from "../types/workout";
 
 
@@ -18,6 +18,17 @@ export const getUserPrograms = async (userId: string) => {
   const q = query(programsRef, orderBy("createdAt", "desc"));
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+
+export const getProgram = async (userId: string, programId: string) => {
+  const { doc, getDoc } = await import("firebase/firestore");
+  const programRef = doc(db, "users", userId, "programs", programId);
+  const programSnap = await getDoc(programRef);
+  if (programSnap.exists()) {
+    return { id: programSnap.id, ...programSnap.data() };
+  } else {
+    return null;
+  }
 };
 
 export const addTrainingDay = async (userId: string, programId: string, dayTitle: string, order: number) => {
@@ -66,4 +77,23 @@ export const finishWorkout = async (userId: string, workoutSummary: any) => {
     ...workoutSummary,
     completedAt: serverTimestamp(),
   });
+};
+
+export const getTotalWorkoutsCount = async (userId: string) => {
+  const { db } = await import("@/lib/firebase");
+  const logsRef = collection(db, "users", userId, "logs");
+  const snapshot = await getCountFromServer(logsRef);
+  return snapshot.data().count;
+};
+
+export const updateProgramName = async (userId: string, programId: string, newName: string) => {
+  const { db } = await import("@/lib/firebase");
+  const programRef = doc(db, "users", userId, "programs", programId);
+  return await updateDoc(programRef, { name: newName });
+};
+
+export const deleteProgram = async (userId: string, programId: string) => {
+  const { db } = await import("@/lib/firebase");
+  const programRef = doc(db, "users", userId, "programs", programId);
+  return await deleteDoc(programRef);
 };
