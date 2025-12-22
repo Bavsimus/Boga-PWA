@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { auth } from "@/lib/firebase";
+import Image from "next/image";
 import {
   createProgram,
   getUserPrograms,
@@ -27,18 +28,7 @@ export default function Dashboard() {
   const [editingProgram, setEditingProgram] = useState<{ id: string, name: string } | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (u) => {
-      setUser(u);
-      if (u) {
-        await loadInitialData(u.uid);
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const loadInitialData = async (uid: string) => {
+  const loadInitialData = useCallback(async (uid: string) => {
     try {
       const [progs, count] = await Promise.all([
         getUserPrograms(uid),
@@ -49,7 +39,18 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Initial data load error:", error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (u) => {
+      setUser(u);
+      if (u) {
+        await loadInitialData(u.uid);
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [loadInitialData]);
 
   const handleCreate = async () => {
     if (!user || !newProgramName || isCreating) return;
@@ -107,10 +108,13 @@ export default function Dashboard() {
       <div className="absolute inset-0 bg-red-600/20 blur-xl rounded-full group-hover:bg-red-600/30 transition-all duration-500" />
       
       {/* Logo Image */}
-      <img 
+      <Image 
         src="/icon-192x192.png" 
-        className="relative w-10 h-10 object-contain" 
+        className="relative object-contain" 
         alt="BOGA Logo" 
+        width={40}
+        height={40}
+        priority
       />
     </div>
 
@@ -282,10 +286,13 @@ function LoginScreen() {
   return (
     <div className="bg-black min-h-screen flex flex-col items-center justify-center text-white p-6 text-center">
       <div className="mb-8 relative w-48 h-48 animate-pulse">
-        <img 
+        <Image 
           src="/boga.png" 
           alt="BOGA Logo" 
-          className="w-full h-full object-contain"
+          className="object-contain"
+          fill
+          priority
+          sizes="(max-width: 768px) 100vw, 33vw"
         />
       </div>
       <p className="text-zinc-500 font-black uppercase text-[10px] tracking-[0.5em] mb-12">

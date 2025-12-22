@@ -48,9 +48,6 @@ export const getProgramDays = async (userId: string, programId: string) => {
 };
 
 export const addExercise = async (userId: string, programId: string, dayId: string, exerciseData: any) => {
-  const { db } = await import("@/lib/firebase");
-  const { collection, addDoc, serverTimestamp } = await import("firebase/firestore");
-  
   const exercisesRef = collection(db, "users", userId, "programs", programId, "days", dayId, "exercises");
   return await addDoc(exercisesRef, {
     ...exerciseData,
@@ -59,9 +56,6 @@ export const addExercise = async (userId: string, programId: string, dayId: stri
 };
 
 export const getExercises = async (userId: string, programId: string, dayId: string) => {
-  const { db } = await import("@/lib/firebase");
-  const { collection, getDocs, query, orderBy } = await import("firebase/firestore");
-
   const exercisesRef = collection(db, "users", userId, "programs", programId, "days", dayId, "exercises");
   const q = query(exercisesRef, orderBy("createdAt", "asc"));
   const querySnapshot = await getDocs(q);
@@ -69,9 +63,6 @@ export const getExercises = async (userId: string, programId: string, dayId: str
 };
 
 export const finishWorkout = async (userId: string, workoutSummary: any) => {
-  const { db } = await import("@/lib/firebase");
-  const { collection, addDoc, serverTimestamp } = await import("firebase/firestore");
-
   const logsRef = collection(db, "users", userId, "logs");
   return await addDoc(logsRef, {
     ...workoutSummary,
@@ -80,20 +71,17 @@ export const finishWorkout = async (userId: string, workoutSummary: any) => {
 };
 
 export const getTotalWorkoutsCount = async (userId: string) => {
-  const { db } = await import("@/lib/firebase");
   const logsRef = collection(db, "users", userId, "logs");
   const snapshot = await getCountFromServer(logsRef);
   return snapshot.data().count;
 };
 
 export const updateProgramName = async (userId: string, programId: string, newName: string) => {
-  const { db } = await import("@/lib/firebase");
   const programRef = doc(db, "users", userId, "programs", programId);
   return await updateDoc(programRef, { name: newName });
 };
 
 export const deleteProgram = async (userId: string, programId: string) => {
-  const { db } = await import("@/lib/firebase");
   const programRef = doc(db, "users", userId, "programs", programId);
   return await deleteDoc(programRef);
 };

@@ -1,6 +1,6 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { auth } from "@/lib/firebase";
 import { 
   addExercise, 
@@ -10,7 +10,7 @@ import {
   deleteExercise 
 } from "@/src/services/database";
 import { User, signInWithPopup } from "firebase/auth";
-import confetti from 'canvas-confetti';
+// confetti import removed from top level to be imported dynamically
 
 export default function ExercisePage() {
   const { id, dayId } = useParams();
@@ -35,6 +35,11 @@ export default function ExercisePage() {
   const [isTimerActive, setIsTimerActive] = useState(false);
   const REST_DURATION = 90; // Saniye cinsinden dinlenme süresi
 
+  const loadExercises = useCallback(async (uid: string, pId: string, dId: string) => {
+    const data = await getExercises(uid, pId, dId);
+    setExercises(data);
+  }, []);
+
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
       setUser(u);
@@ -44,25 +49,7 @@ export default function ExercisePage() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [id, dayId]);
-
-  // Timer Interval Logic
-  useEffect(() => {
-    let interval: any;
-    if (isTimerActive && restTime > 0) {
-      interval = setInterval(() => {
-        setRestTime((prev) => prev - 1);
-      }, 1000);
-    } else if (restTime === 0) {
-      setIsTimerActive(false);
-    }
-    return () => clearInterval(interval);
-  }, [isTimerActive, restTime]);
-
-  const loadExercises = async (uid: string, pId: string, dId: string) => {
-    const data = await getExercises(uid, pId, dId);
-    setExercises(data);
-  };
+  }, [id, dayId, loadExercises]);
 
   const handleAdd = async () => {
     if (!user || !name || !id || !dayId) return;
@@ -119,6 +106,7 @@ export default function ExercisePage() {
   const handleFinishWorkout = async () => {
     if (!user || typeof id !== "string") return;
 
+    const confetti = (await import('canvas-confetti')).default;
     confetti({
       particleCount: 150,
       spread: 70,

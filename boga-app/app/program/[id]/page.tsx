@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { auth } from "@/lib/firebase";
 import { 
   getProgram, 
@@ -29,18 +29,7 @@ export default function ProgramDetails() {
   const [editingDay, setEditingDay] = useState<{id: string, name: string} | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (u) => {
-      setUser(u);
-      if (u && programId) {
-        await loadData(u.uid, programId);
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [programId]);
-
-  const loadData = async (uid: string, pid: string) => {
+  const loadData = useCallback(async (uid: string, pid: string) => {
     try {
       const [progData, daysData] = await Promise.all([
         getProgram(uid, pid),
@@ -51,7 +40,18 @@ export default function ProgramDetails() {
     } catch (error) {
       console.error("Error loading program data:", error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (u) => {
+      setUser(u);
+      if (u && programId) {
+        await loadData(u.uid, programId);
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [programId, loadData]);
 
   const handleCreateDay = async () => {
     if (!user || !newDayName || isCreating) return;
