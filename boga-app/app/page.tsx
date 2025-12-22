@@ -8,7 +8,7 @@ import {
   getTotalWorkoutsCount,
   updateProgramName,
   deleteProgram
-} from "@/src/services/database";
+} from "../src/services/database";
 import { User, signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -286,13 +286,10 @@ function LoginScreen() {
   return (
     <div className="bg-black min-h-screen flex flex-col items-center justify-center text-white p-6 text-center">
       <div className="mb-8 relative w-48 h-48 animate-pulse">
-        <Image 
+        <img 
           src="/boga.png" 
           alt="BOGA Logo" 
-          className="object-contain"
-          fill
-          priority
-          sizes="(max-width: 768px) 100vw, 33vw"
+          className="w-full h-full object-contain"
         />
       </div>
       <p className="text-zinc-500 font-black uppercase text-[10px] tracking-[0.5em] mb-12">
