@@ -123,3 +123,17 @@ export const deleteExercise = async (userId: string, programId: string, dayId: s
   const exRef = doc(db, "users", userId, "programs", programId, "days", dayId, "exercises", exId);
   return await deleteDoc(exRef);
 };
+
+export const getWorkoutHistory = async (userId: string) => {
+  const { db } = await import("@/lib/firebase");
+  const { collection } = await import("firebase/firestore");
+  
+  const logsRef = collection(db, "users", userId, "logs");
+  const q = query(logsRef, orderBy("completedAt", "desc")); // En yeni en üstte
+  const querySnapshot = await getDocs(q);
+  
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
+};

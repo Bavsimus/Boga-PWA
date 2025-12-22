@@ -1,12 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
 import { auth } from "@/lib/firebase";
-import { 
-  createProgram, 
-  getUserPrograms, 
-  getTotalWorkoutsCount, 
-  updateProgramName, 
-  deleteProgram 
+import {
+  createProgram,
+  getUserPrograms,
+  getTotalWorkoutsCount,
+  updateProgramName,
+  deleteProgram
 } from "@/src/services/database";
 import { User, signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -24,7 +24,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   // Edit Mode States
-  const [editingProgram, setEditingProgram] = useState<{id: string, name: string} | null>(null);
+  const [editingProgram, setEditingProgram] = useState<{ id: string, name: string } | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
@@ -104,8 +104,8 @@ export default function Dashboard() {
           <h1 className="text-4xl font-black italic tracking-tighter text-red-600 leading-none">BOGA</h1>
           <p className="text-[10px] text-zinc-500 uppercase tracking-[0.3em] mt-1">Training Systems</p>
         </div>
-        
-        <button 
+
+        <button
           onClick={() => setIsProfileOpen(true)}
           className="w-12 h-12 rounded-full border-2 border-zinc-800 overflow-hidden active:scale-90 transition-all shadow-lg shadow-red-600/10"
         >
@@ -122,15 +122,15 @@ export default function Dashboard() {
       {/* --- PROGRAMS SECTION --- */}
       <section>
         <div className="flex justify-between items-center mb-6">
-           <h2 className="text-zinc-500 text-xs uppercase tracking-[0.2em] font-black">Your Programs</h2>
-           <button 
+          <h2 className="text-zinc-500 text-xs uppercase tracking-[0.2em] font-black">Your Programs</h2>
+          <button
             onClick={() => setIsModalOpen(true)}
             className="bg-zinc-900 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase border border-zinc-800 active:scale-95 transition-all"
-           >
-             + New Program
-           </button>
+          >
+            + New Program
+          </button>
         </div>
-        
+
         <div className="grid gap-4">
           {programs.length === 0 ? (
             <div className="border border-zinc-900 border-dashed p-12 rounded-[2.5rem] text-center text-zinc-700 italic text-sm">
@@ -139,7 +139,7 @@ export default function Dashboard() {
           ) : (
             programs.map((p) => (
               <div key={p.id} className="relative group">
-                <div 
+                <div
                   onClick={() => router.push(`/program/${p.id}`)}
                   className="bg-zinc-900/40 border border-zinc-800 p-7 rounded-[2.5rem] flex justify-between items-center active:scale-[0.98] transition-all cursor-pointer group-hover:border-zinc-700"
                 >
@@ -153,15 +153,15 @@ export default function Dashboard() {
                 </div>
 
                 {/* Edit Icon Button */}
-                <button 
+                <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setEditingProgram({id: p.id, name: p.name});
+                    setEditingProgram({ id: p.id, name: p.name });
                     setIsEditModalOpen(true);
                   }}
                   className="absolute right-6 top-1/2 -translate-y-1/2 p-3 text-zinc-700 hover:text-white transition-colors"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>
                 </button>
               </div>
             ))
@@ -183,18 +183,25 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="space-y-3 flex-1">
-               <div className="p-5 bg-red-600/10 rounded-[2rem] border border-red-600/20 mb-4">
-                  <p className="text-[9px] text-red-500 uppercase font-black mb-1 tracking-widest">Total Workouts Done</p>
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-3xl font-black italic tracking-tighter text-white">{workoutCount}</p>
-                    <p className="text-zinc-500 text-[10px] font-bold uppercase">Sessions</p>
-                  </div>
-               </div>
-               <div className="p-5 bg-zinc-900/50 rounded-[2rem] border border-zinc-800">
-                  <p className="text-[9px] text-zinc-600 uppercase font-black mb-1 tracking-widest">Language</p>
-                  <p className="text-sm font-bold italic">English (Global)</p>
-               </div>
+              <div className="p-5 bg-red-600/10 rounded-[2rem] border border-red-600/20 mb-4">
+                <p className="text-[9px] text-red-500 uppercase font-black mb-1 tracking-widest">Total Workouts Done</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-3xl font-black italic tracking-tighter text-white">{workoutCount}</p>
+                  <p className="text-zinc-500 text-[10px] font-bold uppercase">Sessions</p>
+                </div>
+              </div>
+              <div className="p-5 bg-zinc-900/50 rounded-[2rem] border border-zinc-800">
+                <p className="text-[9px] text-zinc-600 uppercase font-black mb-1 tracking-widest">Language</p>
+                <p className="text-sm font-bold italic">English (Global)</p>
+              </div>
             </div>
+            <button
+              onClick={() => router.push("/history")}
+              className="w-full py-5 mb-3 bg-zinc-900 text-white font-black uppercase text-[10px] border border-zinc-800 rounded-[2rem] active:scale-95 transition-all tracking-widest flex items-center justify-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+              View Workout History
+            </button>
             <button onClick={() => signOut(auth)} className="w-full py-5 text-red-600 font-black uppercase text-[10px] border border-red-900/30 rounded-[2rem] bg-red-950/10 active:scale-95 transition-all">Sign Out Session</button>
           </div>
         </div>
@@ -206,7 +213,7 @@ export default function Dashboard() {
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsModalOpen(false)} />
           <div className="relative bg-zinc-900 w-full max-w-sm rounded-[2.5rem] p-8 border border-zinc-800 shadow-2xl">
             <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-6 text-red-600">New Program</h3>
-            <input 
+            <input
               autoFocus
               className="w-full bg-black border border-zinc-800 p-5 rounded-2xl mb-6 outline-none focus:border-red-600 text-white font-bold"
               placeholder="e.g. POWERLIFTING 101"
@@ -229,10 +236,10 @@ export default function Dashboard() {
           <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={() => setIsEditModalOpen(false)} />
           <div className="relative bg-zinc-900 w-full max-w-sm rounded-[2.5rem] p-8 border border-zinc-800 shadow-2xl">
             <h3 className="text-xl font-black italic uppercase text-white mb-6">Edit Program</h3>
-            <input 
+            <input
               className="w-full bg-black border border-zinc-800 p-5 rounded-2xl mb-6 outline-none focus:border-red-600 text-white font-bold"
               value={editingProgram.name}
-              onChange={(e) => setEditingProgram({...editingProgram, name: e.target.value})}
+              onChange={(e) => setEditingProgram({ ...editingProgram, name: e.target.value })}
             />
             <div className="flex flex-col gap-3">
               <button onClick={handleUpdate} className="w-full bg-white text-black py-4 rounded-2xl font-black uppercase text-xs active:scale-95 transition-all">Save Changes</button>
@@ -263,8 +270,8 @@ function LoginScreen() {
         <h1 className="text-8xl font-black italic text-red-600 tracking-tighter leading-none">BOGA</h1>
         <p className="text-[10px] text-zinc-700 uppercase tracking-[0.6em] mt-4 font-bold">Strength Tracking System</p>
       </div>
-      <button 
-        onClick={login} 
+      <button
+        onClick={login}
         className="bg-white text-black px-14 py-5 rounded-[2.5rem] font-black uppercase text-xs tracking-tighter active:scale-95 transition-all shadow-[0_20px_50px_rgba(255,255,255,0.15)]"
       >
         Login with Google
