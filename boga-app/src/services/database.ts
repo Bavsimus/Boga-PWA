@@ -97,3 +97,29 @@ export const deleteProgram = async (userId: string, programId: string) => {
   const programRef = doc(db, "users", userId, "programs", programId);
   return await deleteDoc(programRef);
 };
+
+// --- GÜNLER İÇİN ---
+export const updateDayName = async (userId: string, programId: string, dayId: string, newName: string) => {
+  const { db } = await import("@/lib/firebase");
+  const dayRef = doc(db, "users", userId, "programs", programId, "days", dayId);
+  return await updateDoc(dayRef, { name: newName });
+};
+
+export const deleteDay = async (userId: string, programId: string, dayId: string) => {
+  const { db } = await import("@/lib/firebase");
+  const dayRef = doc(db, "users", userId, "programs", programId, "days", dayId);
+  return await deleteDoc(dayRef);
+};
+
+// --- HAREKETLER İÇİN ---
+export const updateExercise = async (userId: string, programId: string, dayId: string, exId: string, data: any) => {
+  const { db } = await import("@/lib/firebase");
+  const exRef = doc(db, "users", userId, "programs", programId, "days", dayId, "exercises", exId);
+  return await updateDoc(exRef, data);
+};
+
+export const deleteExercise = async (userId: string, programId: string, dayId: string, exId: string) => {
+  const { db } = await import("@/lib/firebase");
+  const exRef = doc(db, "users", userId, "programs", programId, "days", dayId, "exercises", exId);
+  return await deleteDoc(exRef);
+};
