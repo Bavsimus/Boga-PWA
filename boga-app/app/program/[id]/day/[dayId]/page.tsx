@@ -6,8 +6,8 @@ import {
   addExercise, 
   getExercises, 
   finishWorkout, 
-  updateExercise, // Yeni eklendi
-  deleteExercise  // Yeni eklendi
+  updateExercise, 
+  deleteExercise 
 } from "@/src/services/database";
 import { User, signInWithPopup } from "firebase/auth";
 import confetti from 'canvas-confetti';
@@ -30,6 +30,11 @@ export default function ExercisePage() {
   // Edit State
   const [editingEx, setEditingEx] = useState<any | null>(null);
 
+  // --- REST TIMER STATE ---
+  const [restTime, setRestTime] = useState(0);
+  const [isTimerActive, setIsTimerActive] = useState(false);
+  const REST_DURATION = 90; // Saniye cinsinden dinlenme süresi
+
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
       setUser(u);
@@ -40,6 +45,19 @@ export default function ExercisePage() {
     });
     return () => unsubscribe();
   }, [id, dayId]);
+
+  // Timer Interval Logic
+  useEffect(() => {
+    let interval: any;
+    if (isTimerActive && restTime > 0) {
+      interval = setInterval(() => {
+        setRestTime((prev) => prev - 1);
+      }, 1000);
+    } else if (restTime === 0) {
+      setIsTimerActive(false);
+    }
+    return () => clearInterval(interval);
+  }, [isTimerActive, restTime]);
 
   const loadExercises = async (uid: string, pId: string, dId: string) => {
     const data = await getExercises(uid, pId, dId);
@@ -87,7 +105,15 @@ export default function ExercisePage() {
 
   const toggleSet = (exId: string, index: number) => {
     const key = `${exId}-${index}`;
-    setCompletedSets(prev => ({ ...prev, [key]: !prev[key] }));
+    const isNowDone = !completedSets[key];
+    
+    setCompletedSets(prev => ({ ...prev, [key]: isNowDone }));
+
+    // Eğer set tamamlandıysa timer'ı başlat
+    if (isNowDone) {
+      setRestTime(REST_DURATION);
+      setIsTimerActive(true);
+    }
   };
 
   const handleFinishWorkout = async () => {
@@ -107,7 +133,8 @@ export default function ExercisePage() {
         name: ex.name,
         weight: ex.weight,
         completedSets: Object.keys(completedSets).filter(k => k.startsWith(ex.id) && completedSets[k]).length
-      }))
+      })),
+      completedAt: new Date()
     };
 
     try {
@@ -118,7 +145,6 @@ export default function ExercisePage() {
       }, 2000);
     } catch (error) {
       console.error("Save error:", error);
-      alert("Something went wrong while saving.");
     }
   };
 
@@ -126,7 +152,7 @@ export default function ExercisePage() {
   if (!user) return <LoginScreen />;
 
   return (
-    <main className="min-h-screen bg-black text-white p-6">
+    <main className="min-h-screen bg-black text-white p-6 relative overflow-x-hidden">
       <header className="flex items-center justify-between mb-8">
         <button onClick={() => router.back()} className="text-zinc-500 text-xs font-bold uppercase tracking-widest">← Back</button>
         <h1 className="text-xl font-black italic text-red-600 tracking-tighter">BOGA</h1>
@@ -161,19 +187,18 @@ export default function ExercisePage() {
         </div>
       )}
 
-      <div className="space-y-4 pb-24">
+      <div className="space-y-4 pb-48">
         {exercises.map((ex) => (
-          <div key={ex.id} className={`p-6 rounded-[2rem] relative group transition-all ${isWorkoutActive ? 'bg-zinc-900 border-l-8 border-red-600' : 'bg-zinc-900/40 border border-zinc-800'}`}>
+          <div key={ex.id} className={`p-6 rounded-[2rem] relative transition-all ${isWorkoutActive ? 'bg-zinc-900 border-l-8 border-red-600 shadow-xl' : 'bg-zinc-900/40 border border-zinc-800'}`}>
             <div className="mb-4">
               <h3 className="font-black text-xl italic uppercase tracking-tighter">{ex.name}</h3>
               <p className="text-zinc-500 text-xs font-bold uppercase">{ex.weight} KG • {ex.sets} Sets • {ex.reps} Reps</p>
             </div>
 
-            {/* Edit Icon (Sadece antrenman aktif değilken görünür) */}
             {!isWorkoutActive && (
               <button 
                 onClick={() => setEditingEx(ex)}
-                className="absolute right-6 top-8 p-2 text-zinc-700 hover:text-white transition-colors"
+                className="absolute right-6 top-8 p-2 text-zinc-700 hover:text-white"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
               </button>
@@ -185,7 +210,7 @@ export default function ExercisePage() {
                   <button
                     key={i}
                     onClick={() => toggleSet(ex.id, i)}
-                    className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-black transition-all active:scale-90 ${completedSets[`${ex.id}-${i}`] ? 'bg-red-600 border-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.4)]' : 'border-zinc-800 text-zinc-500'}`}
+                    className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-black transition-all active:scale-90 ${completedSets[`${ex.id}-${i}`] ? 'bg-red-600 border-red-600 text-white' : 'border-zinc-800 text-zinc-500'}`}
                   >
                     {i + 1}
                   </button>
@@ -195,6 +220,39 @@ export default function ExercisePage() {
           </div>
         ))}
       </div>
+
+      {/* --- REST TIMER BAR --- */}
+      {isWorkoutActive && isTimerActive && (
+        <div className="fixed bottom-32 left-6 right-6 z-[60] animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-zinc-950/90 backdrop-blur-xl border border-red-600/20 p-5 rounded-[2rem] shadow-2xl">
+            <div className="flex justify-between items-center mb-3 px-1">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-red-600 rounded-full animate-ping" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Resting Phase</span>
+              </div>
+              <span className="text-lg font-black italic text-white tracking-tighter">{restTime}s</span>
+            </div>
+            <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden">
+              <div 
+                className="bg-red-600 h-full transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(220,38,38,0.5)]"
+                style={{ width: `${(restTime / REST_DURATION) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Finish Button */}
+      {isWorkoutActive && exercises.length > 0 && (
+        <div className="fixed bottom-6 left-6 right-6 z-50">
+          <button 
+            onClick={handleFinishWorkout}
+            className="w-full bg-green-600 text-white font-black py-5 rounded-[2rem] text-xl shadow-2xl active:scale-95 transition-all uppercase italic tracking-tighter"
+          >
+            Finish Workout 🔥
+          </button>
+        </div>
+      )}
 
       {/* Edit Exercise Modal */}
       {editingEx && (
@@ -224,22 +282,11 @@ export default function ExercisePage() {
               </div>
             </div>
             <div className="flex flex-col gap-3 mt-8">
-              <button onClick={handleUpdate} className="w-full bg-white text-black py-4 rounded-2xl font-black uppercase text-xs active:scale-95 transition-all">Save Changes</button>
+              <button onClick={handleUpdate} className="w-full bg-white text-black py-4 rounded-2xl font-black uppercase text-xs">Save Changes</button>
               <button onClick={() => handleDelete(editingEx.id)} className="w-full py-4 text-red-600 font-black uppercase text-[10px] tracking-widest border border-red-900/30 rounded-2xl">Delete Movement</button>
               <button onClick={() => setEditingEx(null)} className="text-zinc-600 font-bold uppercase text-[10px] mt-2">Cancel</button>
             </div>
           </div>
-        </div>
-      )}
-
-      {isWorkoutActive && exercises.length > 0 && (
-        <div className="fixed bottom-6 left-6 right-6">
-          <button 
-            onClick={handleFinishWorkout}
-            className="w-full bg-green-600 text-white font-black py-5 rounded-[2rem] text-xl shadow-2xl active:scale-95 transition-all"
-          >
-            FINISH & SAVE WORKOUT 🔥
-          </button>
         </div>
       )}
     </main>
@@ -252,9 +299,10 @@ function LoginScreen() {
     await signInWithPopup(auth, googleProvider);
   };
   return (
-    <div className="bg-black min-h-screen flex flex-col items-center justify-center text-white p-6">
-      <h1 className="text-7xl font-black italic text-red-600 mb-8">BOGA</h1>
-      <button onClick={login} className="bg-white text-black px-12 py-4 rounded-2xl font-black uppercase">Google Login</button>
+    <div className="bg-black min-h-screen flex flex-col items-center justify-center text-white p-6 text-center">
+      <h1 className="text-8xl font-black italic text-red-600 mb-4 tracking-tighter">BOGA</h1>
+      <p className="text-zinc-500 font-bold uppercase text-[10px] tracking-[0.5em] mb-12">Strength Tracker</p>
+      <button onClick={login} className="bg-white text-black px-12 py-5 rounded-[2rem] font-black uppercase tracking-tighter shadow-2xl active:scale-95 transition-all">Google Login</button>
     </div>
   );
 }
