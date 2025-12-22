@@ -13,10 +13,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Boga",
-  description: "Antrenman Takip Sistemi",
-  manifest: "/manifest.json", // İşte burası kritik
-};
+  title: 'BOGA Training',
+  description: 'Forge Your Strength',
+  icons: {
+    icon: '/icon-192x192.png',
+    apple: '/icon-192x192.png',
+  },
+  manifest: '/manifest.json', // PWA için (Opsiyonel ama önerilir)
+}
 
 export default function RootLayout({
   children,

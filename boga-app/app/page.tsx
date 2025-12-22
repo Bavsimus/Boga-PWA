@@ -100,10 +100,25 @@ export default function Dashboard() {
     <main className="min-h-screen bg-black text-white p-6 font-sans">
       {/* --- HEADER --- */}
       <header className="flex justify-between items-center mb-12">
-        <div>
-          <h1 className="text-4xl font-black italic tracking-tighter text-red-600 leading-none">BOGA</h1>
-          <p className="text-[10px] text-zinc-500 uppercase tracking-[0.3em] mt-1">Training Systems</p>
-        </div>
+<div className="flex items-center gap-4">
+    {/* Logo Alanı */}
+    <div className="relative group">
+      {/* Arkadaki Doğal Parlama (Blur) */}
+      <div className="absolute inset-0 bg-red-600/20 blur-xl rounded-full group-hover:bg-red-600/30 transition-all duration-500" />
+      
+      {/* Logo Image */}
+      <img 
+        src="/icon-192x192.png" 
+        className="relative w-10 h-10 object-contain" 
+        alt="BOGA Logo" 
+      />
+    </div>
+
+    <div>
+      <h1 className="text-3xl font-black italic tracking-tighter text-red-600 leading-none">BOGA</h1>
+      <p className="text-[9px] text-zinc-500 uppercase tracking-[0.3em] mt-0.5">Training Systems</p>
+    </div>
+  </div>
 
         <button
           onClick={() => setIsProfileOpen(true)}
@@ -265,16 +280,19 @@ function LoginScreen() {
   };
 
   return (
-    <div className="bg-black min-h-screen flex flex-col items-center justify-center text-white p-6">
-      <div className="text-center mb-16 animate-pulse">
-        <h1 className="text-8xl font-black italic text-red-600 tracking-tighter leading-none">BOGA</h1>
-        <p className="text-[10px] text-zinc-700 uppercase tracking-[0.6em] mt-4 font-bold">Strength Tracking System</p>
+    <div className="bg-black min-h-screen flex flex-col items-center justify-center text-white p-6 text-center">
+      <div className="mb-8 relative w-48 h-48 animate-pulse">
+        <img 
+          src="/boga.png" 
+          alt="BOGA Logo" 
+          className="w-full h-full object-contain"
+        />
       </div>
-      <button
-        onClick={login}
-        className="bg-white text-black px-14 py-5 rounded-[2.5rem] font-black uppercase text-xs tracking-tighter active:scale-95 transition-all shadow-[0_20px_50px_rgba(255,255,255,0.15)]"
-      >
-        Login with Google
+      <p className="text-zinc-500 font-black uppercase text-[10px] tracking-[0.5em] mb-12">
+        Strength Tracker
+      </p>
+      <button onClick={login} className="bg-white text-black px-12 py-5 rounded-[2rem] font-black uppercase tracking-tighter shadow-2xl active:scale-95 transition-all">
+        Google Login
       </button>
     </div>
   );
