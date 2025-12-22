@@ -56,3 +56,14 @@ export const getExercises = async (userId: string, programId: string, dayId: str
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
+
+export const finishWorkout = async (userId: string, workoutSummary: any) => {
+  const { db } = await import("@/lib/firebase");
+  const { collection, addDoc, serverTimestamp } = await import("firebase/firestore");
+
+  const logsRef = collection(db, "users", userId, "logs");
+  return await addDoc(logsRef, {
+    ...workoutSummary,
+    completedAt: serverTimestamp(),
+  });
+};
