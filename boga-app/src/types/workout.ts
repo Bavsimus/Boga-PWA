@@ -40,3 +40,25 @@ export interface StreakData {
   longestStreak: number;
   totalWorkouts: number;
 }
+
+export interface UserProfile {
+  userId: string;
+  username: string; // unique, lowercase
+  displayName: string;
+  bio?: string;
+  profilePicture?: string;
+  isPublic: boolean;
+  showPrograms: boolean;
+  createdAt: any; // Firestore Timestamp
+}
+
+export interface LeaderboardEntry {
+  userId: string;
+  username: string;
+  displayName: string;
+  profilePicture?: string;
+  currentStreak: number;
+  longestStreak: number;
+  totalWorkouts: number;
+  rank: number;
+}

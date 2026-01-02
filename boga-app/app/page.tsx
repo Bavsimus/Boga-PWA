@@ -8,7 +8,9 @@ import {
   getTotalWorkoutsCount,
   updateProgramName,
   deleteProgram,
-  getWorkoutCompletions
+  getWorkoutCompletions,
+  getUserProfile,
+  createAutoProfile
 } from "../src/services/database";
 import { User, signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -38,6 +40,9 @@ export default function Dashboard() {
   const [streakData, setStreakData] = useState<StreakData>({ currentStreak: 0, longestStreak: 0, totalWorkouts: 0 });
   const [weeklyData, setWeeklyData] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
 
+  // Profile
+  const [username, setUsername] = useState("");
+
   const loadInitialData = useCallback(async (uid: string) => {
     try {
       const [progs, count, comps] = await Promise.all([
@@ -65,12 +70,30 @@ export default function Dashboard() {
     const unsubscribe = auth.onAuthStateChanged(async (u) => {
       setUser(u);
       if (u) {
+        // Check if user has profile
+        let profile = await getUserProfile(u.uid);
+        if (!profile || !profile.username) {
+          // Auto-create profile on first login
+          try {
+            const autoUsername = await createAutoProfile(
+              u.uid,
+              u.displayName || "BOGA User",
+              u.email || ""
+            );
+            setUsername(autoUsername);
+            profile = await getUserProfile(u.uid);
+          } catch (error) {
+            console.error("Error creating profile:", error);
+          }
+        } else {
+          setUsername((profile as any).username || "");
+        }
         await loadInitialData(u.uid);
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [loadInitialData]);
+  }, [loadInitialData, router]);
 
   const handleCreate = async () => {
     if (!user || !newProgramName || isCreating) return;
@@ -238,6 +261,13 @@ export default function Dashboard() {
                 <p className="text-sm font-bold italic">English (Global)</p>
               </div>
             </div>
+            <button
+              onClick={() => username && router.push(`/profile/${username}`)}
+              className="w-full py-5 mb-3 bg-zinc-900 text-white font-black uppercase text-[10px] border border-zinc-800 rounded-[2rem] active:scale-95 transition-all tracking-widest flex items-center justify-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+              My Profile
+            </button>
             <button
               onClick={() => router.push("/settings")}
               className="w-full py-5 mb-3 bg-zinc-900 text-white font-black uppercase text-[10px] border border-zinc-800 rounded-[2rem] active:scale-95 transition-all tracking-widest flex items-center justify-center gap-2"
