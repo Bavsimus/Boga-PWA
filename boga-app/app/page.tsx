@@ -101,28 +101,28 @@ export default function Dashboard() {
     <main className="min-h-screen bg-black text-white p-6 font-sans">
       {/* --- HEADER --- */}
       <header className="flex justify-between items-center mb-12">
-<div className="flex items-center gap-4">
-    {/* Logo Alanı */}
-    <div className="relative group">
-      {/* Arkadaki Doğal Parlama (Blur) */}
-      <div className="absolute inset-0 bg-red-600/20 blur-xl rounded-full group-hover:bg-red-600/30 transition-all duration-500" />
-      
-      {/* Logo Image */}
-      <Image 
-        src="/icon-192x192.png" 
-        className="relative object-contain" 
-        alt="BOGA Logo" 
-        width={40}
-        height={40}
-        priority
-      />
-    </div>
+        <div className="flex items-center gap-4">
+          {/* Logo Alanı */}
+          <div className="relative group">
+            {/* Arkadaki Doğal Parlama (Blur) */}
+            <div className="absolute inset-0 bg-red-600/20 blur-xl rounded-full group-hover:bg-red-600/30 transition-all duration-500" />
 
-    <div>
-      <h1 className="text-3xl font-black italic tracking-tighter text-red-600 leading-none">BOGA</h1>
-      <p className="text-[9px] text-zinc-500 uppercase tracking-[0.3em] mt-0.5">Training Systems</p>
-    </div>
-  </div>
+            {/* Logo Image */}
+            <Image
+              src="/icon-192x192.png"
+              className="relative object-contain"
+              alt="BOGA Logo"
+              width={40}
+              height={40}
+              priority
+            />
+          </div>
+
+          <div>
+            <h1 className="text-3xl font-black italic tracking-tighter text-red-600 leading-none">BOGA</h1>
+            <p className="text-[9px] text-zinc-500 uppercase tracking-[0.3em] mt-0.5">Training Systems</p>
+          </div>
+        </div>
 
         <button
           onClick={() => setIsProfileOpen(true)}
@@ -215,6 +215,13 @@ export default function Dashboard() {
               </div>
             </div>
             <button
+              onClick={() => router.push("/settings")}
+              className="w-full py-5 mb-3 bg-zinc-900 text-white font-black uppercase text-[10px] border border-zinc-800 rounded-[2rem] active:scale-95 transition-all tracking-widest flex items-center justify-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M12 1v6m0 6v6m-6-6h6m6 0h-6m-3.5-8.5 4 4m4 4 4 4m-16 0 4-4m4-4 4-4" /></svg>
+              Settings
+            </button>
+            <button
               onClick={() => router.push("/history")}
               className="w-full py-5 mb-3 bg-zinc-900 text-white font-black uppercase text-[10px] border border-zinc-800 rounded-[2rem] active:scale-95 transition-all tracking-widest flex items-center justify-center gap-2"
             >
@@ -286,9 +293,9 @@ function LoginScreen() {
   return (
     <div className="bg-black min-h-screen flex flex-col items-center justify-center text-white p-6 text-center">
       <div className="mb-8 relative w-48 h-48 animate-pulse">
-        <img 
-          src="/boga.png" 
-          alt="BOGA Logo" 
+        <img
+          src="/boga.png"
+          alt="BOGA Logo"
           className="w-full h-full object-contain"
         />
       </div>

@@ -2,12 +2,13 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import { auth } from "@/lib/firebase";
-import { 
-  addExercise, 
-  getExercises, 
-  finishWorkout, 
-  updateExercise, 
-  deleteExercise 
+import {
+  addExercise,
+  getExercises,
+  finishWorkout,
+  updateExercise,
+  deleteExercise,
+  getUserSettings
 } from "@/src/services/database";
 import { User, signInWithPopup } from "firebase/auth";
 // confetti import removed from top level to be imported dynamically
@@ -18,7 +19,7 @@ export default function ExercisePage() {
   const [user, setUser] = useState<User | null>(null);
   const [exercises, setExercises] = useState<any[]>([]);
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
-  const [completedSets, setCompletedSets] = useState<{[key: string]: boolean}>({});
+  const [completedSets, setCompletedSets] = useState<{ [key: string]: boolean }>({});
   const [loading, setLoading] = useState(true);
 
   // Form State
@@ -33,7 +34,8 @@ export default function ExercisePage() {
   // --- REST TIMER STATE ---
   const [restTime, setRestTime] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
-  const REST_DURATION = 90; // Saniye cinsinden dinlenme süresi
+  const [restTimerEnabled, setRestTimerEnabled] = useState(true);
+  const [restDuration, setRestDuration] = useState(90);
 
   // Countdown timer effect
   useEffect(() => {
@@ -61,10 +63,14 @@ export default function ExercisePage() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((u) => {
+    const unsubscribe = auth.onAuthStateChanged(async (u) => {
       setUser(u);
       if (u && id && dayId) {
         loadExercises(u.uid, id as string, dayId as string);
+        // Load user settings
+        const settings = await getUserSettings(u.uid);
+        setRestTimerEnabled(settings.restTimerEnabled);
+        setRestDuration(settings.restDuration);
       }
       setLoading(false);
     });
@@ -113,12 +119,12 @@ export default function ExercisePage() {
   const toggleSet = (exId: string, index: number) => {
     const key = `${exId}-${index}`;
     const isNowDone = !completedSets[key];
-    
+
     setCompletedSets(prev => ({ ...prev, [key]: isNowDone }));
 
-    // Eğer set tamamlandıysa timer'ı başlat
-    if (isNowDone) {
-      setRestTime(REST_DURATION);
+    // Eğer set tamamlandıysa ve timer enabled ise timer'ı başlat
+    if (isNowDone && restTimerEnabled) {
+      setRestTime(restDuration);
       setIsTimerActive(true);
     }
   };
@@ -168,7 +174,7 @@ export default function ExercisePage() {
 
       {!isWorkoutActive ? (
         <section className="mb-10">
-          <button 
+          <button
             onClick={() => setIsWorkoutActive(true)}
             className="w-full bg-red-600 text-white font-black py-6 rounded-[2.5rem] text-2xl italic mb-10 shadow-lg active:scale-95 transition-all"
           >
@@ -204,11 +210,11 @@ export default function ExercisePage() {
             </div>
 
             {!isWorkoutActive && (
-              <button 
+              <button
                 onClick={() => setEditingEx(ex)}
                 className="absolute right-6 top-8 p-2 text-zinc-700 hover:text-white"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>
               </button>
             )}
 
@@ -241,9 +247,9 @@ export default function ExercisePage() {
               <span className="text-lg font-black italic text-white tracking-tighter">{restTime}s</span>
             </div>
             <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden">
-              <div 
+              <div
                 className="bg-red-600 h-full transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(220,38,38,0.5)]"
-                style={{ width: `${(restTime / REST_DURATION) * 100}%` }}
+                style={{ width: `${(restTime / restDuration) * 100}%` }}
               />
             </div>
           </div>
@@ -253,7 +259,7 @@ export default function ExercisePage() {
       {/* Finish Button */}
       {isWorkoutActive && exercises.length > 0 && (
         <div className="fixed bottom-6 left-6 right-6 z-50">
-          <button 
+          <button
             onClick={handleFinishWorkout}
             className="w-full bg-green-600 text-white font-black py-5 rounded-[2rem] text-xl shadow-2xl active:scale-95 transition-all uppercase italic tracking-tighter"
           >
@@ -269,23 +275,23 @@ export default function ExercisePage() {
           <div className="relative bg-zinc-900 w-full max-w-sm rounded-[2.5rem] p-8 border border-zinc-800 shadow-2xl">
             <h3 className="text-xl font-black italic uppercase text-white mb-6">Edit Movement</h3>
             <div className="space-y-4">
-              <input 
+              <input
                 className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 text-white font-bold"
                 value={editingEx.name}
-                onChange={(e) => setEditingEx({...editingEx, name: e.target.value})}
+                onChange={(e) => setEditingEx({ ...editingEx, name: e.target.value })}
               />
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div>
                   <label className="text-[10px] text-zinc-500 uppercase font-black">Sets</label>
-                  <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl outline-none text-center font-bold mt-1" value={editingEx.sets} onChange={(e) => setEditingEx({...editingEx, sets: e.target.value})} />
+                  <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl outline-none text-center font-bold mt-1" value={editingEx.sets} onChange={(e) => setEditingEx({ ...editingEx, sets: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-[10px] text-zinc-500 uppercase font-black">Reps</label>
-                  <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl outline-none text-center font-bold mt-1" value={editingEx.reps} onChange={(e) => setEditingEx({...editingEx, reps: e.target.value})} />
+                  <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl outline-none text-center font-bold mt-1" value={editingEx.reps} onChange={(e) => setEditingEx({ ...editingEx, reps: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-[10px] text-zinc-500 uppercase font-black">Kg</label>
-                  <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl outline-none text-center font-bold mt-1" value={editingEx.weight} onChange={(e) => setEditingEx({...editingEx, weight: e.target.value})} />
+                  <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl outline-none text-center font-bold mt-1" value={editingEx.weight} onChange={(e) => setEditingEx({ ...editingEx, weight: e.target.value })} />
                 </div>
               </div>
             </div>

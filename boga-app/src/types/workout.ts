@@ -21,3 +21,8 @@ export interface Program {
   isActive: boolean;
   createdAt: any;
 }
+
+export interface UserSettings {
+  restTimerEnabled: boolean;
+  restDuration: number; // in seconds
+}

@@ -115,13 +115,43 @@ export const deleteExercise = async (userId: string, programId: string, dayId: s
 export const getWorkoutHistory = async (userId: string) => {
   const { db } = await import("@/lib/firebase");
   const { collection } = await import("firebase/firestore");
-  
+
   const logsRef = collection(db, "users", userId, "logs");
   const q = query(logsRef, orderBy("completedAt", "desc")); // En yeni en üstte
   const querySnapshot = await getDocs(q);
-  
+
   return querySnapshot.docs.map(doc => ({
     id: doc.id,
     ...doc.data()
   }));
+};
+
+// --- USER SETTINGS ---
+export const getUserSettings = async (userId: string) => {
+  const { db } = await import("@/lib/firebase");
+  const { doc, getDoc, setDoc } = await import("firebase/firestore");
+
+  const settingsRef = doc(db, "users", userId, "settings", "preferences");
+  const settingsSnap = await getDoc(settingsRef);
+
+  if (settingsSnap.exists()) {
+    return settingsSnap.data();
+  } else {
+    // Return default settings if none exist
+    const defaultSettings = {
+      restTimerEnabled: true,
+      restDuration: 90
+    };
+    // Create default settings in database
+    await setDoc(settingsRef, defaultSettings);
+    return defaultSettings;
+  }
+};
+
+export const updateUserSettings = async (userId: string, settings: { restTimerEnabled: boolean; restDuration: number }) => {
+  const { db } = await import("@/lib/firebase");
+  const { doc, setDoc } = await import("firebase/firestore");
+
+  const settingsRef = doc(db, "users", userId, "settings", "preferences");
+  return await setDoc(settingsRef, settings, { merge: true });
 };
