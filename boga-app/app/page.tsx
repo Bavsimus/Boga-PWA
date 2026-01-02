@@ -70,30 +70,41 @@ export default function Dashboard() {
     const unsubscribe = auth.onAuthStateChanged(async (u) => {
       setUser(u);
       if (u) {
-        // Check if user has profile
-        let profile = await getUserProfile(u.uid);
-        if (!profile || !profile.username) {
-          // Auto-create profile on first login
-          try {
+        try {
+          // Check if user has profile
+          let profile = await getUserProfile(u.uid);
+          if (!profile || !(profile as any).username) {
+            // Auto-create profile on first login
+            console.log("Creating auto profile for new user...");
             const autoUsername = await createAutoProfile(
               u.uid,
               u.displayName || "BOGA User",
               u.email || ""
             );
+            console.log("Profile created with username:", autoUsername);
             setUsername(autoUsername);
+            // Reload profile to confirm
             profile = await getUserProfile(u.uid);
-          } catch (error) {
-            console.error("Error creating profile:", error);
+          } else {
+            setUsername((profile as any).username || "");
           }
-        } else {
-          setUsername((profile as any).username || "");
+
+          // Load user data
+          await loadInitialData(u.uid);
+        } catch (error) {
+          console.error("Error in auth flow:", error);
+          // Still try to load data even if profile creation failed
+          try {
+            await loadInitialData(u.uid);
+          } catch (dataError) {
+            console.error("Error loading data:", dataError);
+          }
         }
-        await loadInitialData(u.uid);
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [loadInitialData, router]);
+  }, [loadInitialData]);
 
   const handleCreate = async () => {
     if (!user || !newProgramName || isCreating) return;
