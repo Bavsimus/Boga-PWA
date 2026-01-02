@@ -195,7 +195,7 @@ export default function PublicProfilePage() {
                             {programs.map((program) => (
                                 <div
                                     key={program.id}
-                                    onClick={() => router.push(`/program/${program.id}`)}
+                                    onClick={() => router.push(`/program/${program.id}?userId=${profile.userId}`)}
                                     className="bg-zinc-900/40 border border-zinc-800 p-5 rounded-[2rem] cursor-pointer hover:border-red-600/50 transition-all active:scale-95"
                                 >
                                     <h3 className="text-lg font-black italic text-white tracking-tight">

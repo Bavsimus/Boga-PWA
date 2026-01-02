@@ -1,22 +1,24 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { auth } from "@/lib/firebase";
-import { 
-  getProgram, 
-  getProgramDays, 
-  addTrainingDay, 
+import {
+  getProgram,
+  getProgramDays,
+  addTrainingDay,
   updateDayName, // Yeni eklendi
   deleteDay      // Yeni eklendi
 } from "@/src/services/database";
 import { User } from "firebase/auth";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 export default function ProgramDetails() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const programId = params.id as string;
-  
+  const userIdParam = searchParams.get('userId'); // Get userId from URL
+
   const [user, setUser] = useState<User | null>(null);
   const [program, setProgram] = useState<any>(null);
   const [days, setDays] = useState<any[]>([]);
@@ -24,9 +26,10 @@ export default function ProgramDetails() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newDayName, setNewDayName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
 
   // Edit States
-  const [editingDay, setEditingDay] = useState<{id: string, name: string} | null>(null);
+  const [editingDay, setEditingDay] = useState<{ id: string, name: string } | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const loadData = useCallback(async (uid: string, pid: string) => {
@@ -45,8 +48,15 @@ export default function ProgramDetails() {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (u) => {
       setUser(u);
-      if (u && programId) {
-        await loadData(u.uid, programId);
+      if (programId) {
+        // Check if userId is provided in URL (viewing someone else's program)
+        const targetUserId = userIdParam || u?.uid;
+
+        if (targetUserId) {
+          // Check if it's the user's own program
+          setIsOwner(u?.uid === targetUserId);
+          await loadData(targetUserId, programId);
+        }
       }
       setLoading(false);
     });
@@ -96,7 +106,7 @@ export default function ProgramDetails() {
     </div>
   );
 
-  if (!user) return null; 
+  if (!user) return null;
 
   return (
     <main className="min-h-screen bg-black text-white p-6 font-sans">
@@ -113,12 +123,14 @@ export default function ProgramDetails() {
       <section>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-zinc-500 text-xs uppercase tracking-[0.2em] font-black">Training Days</h2>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="bg-zinc-900 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase border border-zinc-800 active:scale-95 transition-all"
-          >
-            + Add Day
-          </button>
+          {isOwner && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="bg-zinc-900 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase border border-zinc-800 active:scale-95 transition-all"
+            >
+              + Add Day
+            </button>
+          )}
         </div>
 
         <div className="grid gap-4">
@@ -129,7 +141,7 @@ export default function ProgramDetails() {
           ) : (
             days.map((day) => (
               <div key={day.id} className="relative group">
-                <Link href={`/program/${programId}/day/${day.id}`}>
+                <Link href={`/program/${programId}/day/${day.id}${userIdParam ? `?userId=${userIdParam}` : ''}`}>
                   <div className="bg-zinc-900/40 border border-zinc-800 p-7 rounded-[2.5rem] flex justify-between items-center active:scale-[0.98] transition-all group-hover:border-zinc-700">
                     <div>
                       <h3 className="text-xl font-black italic uppercase tracking-tight group-hover:text-red-600 transition-colors">
@@ -141,18 +153,20 @@ export default function ProgramDetails() {
                   </div>
                 </Link>
 
-                {/* Edit Icon Button */}
-                <button 
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setEditingDay({id: day.id, name: day.name});
-                    setIsEditModalOpen(true);
-                  }}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 p-3 text-zinc-700 hover:text-white transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                </button>
+                {/* Edit Icon Button - Only for owner */}
+                {isOwner && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setEditingDay({ id: day.id, name: day.name });
+                      setIsEditModalOpen(true);
+                    }}
+                    className="absolute right-6 top-1/2 -translate-y-1/2 p-3 text-zinc-700 hover:text-white transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>
+                  </button>
+                )}
               </div>
             ))
           )}
@@ -165,7 +179,7 @@ export default function ProgramDetails() {
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsModalOpen(false)} />
           <div className="relative bg-zinc-900 w-full max-w-sm rounded-[2.5rem] p-8 border border-zinc-800 shadow-2xl">
             <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-6 text-red-600">New Day</h3>
-            <input 
+            <input
               autoFocus
               className="w-full bg-black border border-zinc-800 p-5 rounded-2xl mb-6 outline-none focus:border-red-600 transition-all font-bold text-white placeholder:text-zinc-700"
               placeholder="e.g. PUSH DAY A"
@@ -174,8 +188,8 @@ export default function ProgramDetails() {
             />
             <div className="flex gap-4">
               <button onClick={() => setIsModalOpen(false)} className="flex-1 text-zinc-600 font-black uppercase text-[10px] tracking-widest">Cancel</button>
-              <button 
-                onClick={handleCreateDay} 
+              <button
+                onClick={handleCreateDay}
                 disabled={isCreating}
                 className="flex-[2] bg-white text-black py-4 rounded-2xl font-black uppercase text-xs active:scale-95 transition-all disabled:opacity-50"
               >
@@ -192,10 +206,10 @@ export default function ProgramDetails() {
           <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={() => setIsEditModalOpen(false)} />
           <div className="relative bg-zinc-900 w-full max-w-sm rounded-[2.5rem] p-8 border border-zinc-800 shadow-2xl">
             <h3 className="text-xl font-black italic uppercase text-white mb-6">Edit Training Day</h3>
-            <input 
+            <input
               className="w-full bg-black border border-zinc-800 p-5 rounded-2xl mb-6 outline-none focus:border-red-600 text-white font-bold"
               value={editingDay.name}
-              onChange={(e) => setEditingDay({...editingDay, name: e.target.value})}
+              onChange={(e) => setEditingDay({ ...editingDay, name: e.target.value })}
             />
             <div className="flex flex-col gap-3">
               <button onClick={handleUpdateDay} className="w-full bg-white text-black py-4 rounded-2xl font-black uppercase text-xs active:scale-95 transition-all">Save Changes</button>

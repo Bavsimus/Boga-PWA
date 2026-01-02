@@ -1,5 +1,5 @@
 "use client";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import { auth } from "@/lib/firebase";
 import {
@@ -18,12 +18,15 @@ import { User, signInWithPopup } from "firebase/auth";
 export default function ExercisePage() {
   const { id, dayId } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const userIdParam = searchParams.get('userId'); // Get userId from URL
   const [user, setUser] = useState<User | null>(null);
   const [exercises, setExercises] = useState<any[]>([]);
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
   const [completedSets, setCompletedSets] = useState<{ [key: string]: boolean }>({});
   const [loading, setLoading] = useState(true);
   const [dayName, setDayName] = useState("");
+  const [isOwner, setIsOwner] = useState(false);
 
   // Form State
   const [name, setName] = useState("");
@@ -74,17 +77,28 @@ export default function ExercisePage() {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (u) => {
       setUser(u);
-      if (u && id && dayId) {
-        loadExercises(u.uid, id as string, dayId as string);
-        // Load user settings
-        const settings = await getUserSettings(u.uid);
-        setRestTimerEnabled(settings.restTimerEnabled);
-        setRestDuration(settings.restDuration);
+      if (id && dayId) {
+        // Use userId from URL if provided, otherwise use current user's ID
+        const targetUserId = userIdParam || u?.uid;
+
+        if (targetUserId) {
+          // Check if viewing own workout
+          setIsOwner(u?.uid === targetUserId);
+
+          loadExercises(targetUserId, id as string, dayId as string);
+
+          // Load settings only for own workouts
+          if (u?.uid === targetUserId) {
+            const settings = await getUserSettings(targetUserId);
+            setRestTimerEnabled(settings.restTimerEnabled);
+            setRestDuration(settings.restDuration);
+          }
+        }
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [id, dayId, loadExercises]);
+  }, [id, dayId, loadExercises, userIdParam]);
 
   const handleAdd = async () => {
     if (!user || !name || !id || !dayId) return;
@@ -191,32 +205,36 @@ export default function ExercisePage() {
 
       {!isWorkoutActive ? (
         <section className="mb-10">
-          <button
-            onClick={() => setIsWorkoutActive(true)}
-            className="w-full bg-red-600 text-white font-black py-6 rounded-[2.5rem] text-2xl italic mb-10 shadow-lg active:scale-95 transition-all"
-          >
-            START WORKOUT
-          </button>
+          {isOwner && (
+            <>
+              <button
+                onClick={() => setIsWorkoutActive(true)}
+                className="w-full bg-red-600 text-white font-black py-6 rounded-[2.5rem] text-2xl italic mb-10 shadow-lg active:scale-95 transition-all"
+              >
+                START WORKOUT
+              </button>
 
-          <div className="bg-zinc-900 p-6 rounded-[2rem] border border-zinc-800">
-            <h2 className="text-xs font-bold mb-4 uppercase text-zinc-500 tracking-widest text-center">Add New Movement</h2>
-            <div className="space-y-3">
-              <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold" placeholder="Movement Name" value={name} onChange={(e) => setName(e.target.value)} />
-              <div className="grid grid-cols-3 gap-2">
-                <input type="number" className="bg-black border border-zinc-800 p-4 rounded-2xl outline-none text-center font-bold" placeholder="Sets" value={sets} onChange={(e) => setSets(e.target.value)} />
-                <input type="number" className="bg-black border border-zinc-800 p-4 rounded-2xl outline-none text-center font-bold" placeholder="Reps" value={reps} onChange={(e) => setReps(e.target.value)} />
-                <input type="number" className="bg-black border border-zinc-800 p-4 rounded-2xl outline-none text-center font-bold" placeholder="Kg" value={weight} onChange={(e) => setWeight(e.target.value)} />
+              <div className="bg-zinc-900 p-6 rounded-[2rem] border border-zinc-800">
+                <h2 className="text-xs font-bold mb-4 uppercase text-zinc-500 tracking-widest text-center">Add New Movement</h2>
+                <div className="space-y-3">
+                  <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold" placeholder="Movement Name" value={name} onChange={(e) => setName(e.target.value)} />
+                  <div className="grid grid-cols-3 gap-2">
+                    <input type="number" className="bg-black border border-zinc-800 p-4 rounded-2xl outline-none text-center font-bold" placeholder="Sets" value={sets} onChange={(e) => setSets(e.target.value)} />
+                    <input type="number" className="bg-black border border-zinc-800 p-4 rounded-2xl outline-none text-center font-bold" placeholder="Reps" value={reps} onChange={(e) => setReps(e.target.value)} />
+                    <input type="number" className="bg-black border border-zinc-800 p-4 rounded-2xl outline-none text-center font-bold" placeholder="Kg" value={weight} onChange={(e) => setWeight(e.target.value)} />
+                  </div>
+                  <button onClick={handleAdd} className="w-full bg-white text-black font-black py-4 rounded-2xl uppercase mt-2 active:scale-95 transition-all">Add to Routine</button>
+                </div>
               </div>
-              <button onClick={handleAdd} className="w-full bg-white text-black font-black py-4 rounded-2xl uppercase mt-2 active:scale-95 transition-all">Add to Routine</button>
-            </div>
-          </div>
+            </>
+          )}
         </section>
-      ) : (
+      ) : isOwner ? (
         <div className="mb-6 flex justify-between items-center">
           <h2 className="text-2xl font-black italic text-red-600 uppercase">Training Active</h2>
           <button onClick={() => setIsWorkoutActive(false)} className="text-xs font-bold text-zinc-500 underline uppercase">Cancel</button>
         </div>
-      )}
+      ) : null}
 
       <div className="space-y-4 pb-48">
         {exercises.map((ex) => (
@@ -226,7 +244,7 @@ export default function ExercisePage() {
               <p className="text-zinc-500 text-xs font-bold uppercase">{ex.weight} KG • {ex.sets} Sets • {ex.reps} Reps</p>
             </div>
 
-            {!isWorkoutActive && (
+            {!isWorkoutActive && isOwner && (
               <button
                 onClick={() => setEditingEx(ex)}
                 className="absolute right-6 top-8 p-2 text-zinc-700 hover:text-white"

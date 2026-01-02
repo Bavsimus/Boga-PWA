@@ -7,6 +7,7 @@ import { Program } from "../types/workout";
 export const createProgram = async (userId: string, programName: string) => {
   const programsRef = collection(db, "users", userId, "programs");
   return await addDoc(programsRef, {
+    userId: userId, // Store owner's userId
     name: programName,
     isActive: true,
     createdAt: serverTimestamp(),
