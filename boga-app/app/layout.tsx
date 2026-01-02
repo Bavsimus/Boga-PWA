@@ -16,8 +16,8 @@ export const metadata = {
   title: 'BOGA Training',
   description: 'Forge Your Strength',
   icons: {
-    icon: '/icon-192x192.png',
-    apple: '/icon-192x192.png',
+    icon: '/boga.png',
+    apple: '/boga.png',
   },
   manifest: '/manifest.json', // PWA için (Opsiyonel ama önerilir)
 }
