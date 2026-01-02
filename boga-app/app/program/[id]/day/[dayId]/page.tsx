@@ -169,7 +169,12 @@ export default function ExercisePage() {
     <main className="min-h-screen bg-black text-white p-6 relative overflow-x-hidden">
       <header className="flex items-center justify-between mb-8">
         <button onClick={() => router.back()} className="text-zinc-500 text-xs font-bold uppercase tracking-widest">← Back</button>
-        <h1 className="text-xl font-black italic text-red-600 tracking-tighter">BOGA</h1>
+        <div className="flex items-center gap-3">
+          <div className="relative w-10 h-10">
+            <img src="/boga.png" alt="BOGA Logo" className="w-full h-full object-contain" />
+          </div>
+          <h1 className="text-xl font-black italic text-red-600 tracking-tighter">BOGA</h1>
+        </div>
       </header>
 
       {!isWorkoutActive ? (
@@ -314,7 +319,16 @@ function LoginScreen() {
   };
   return (
     <div className="bg-black min-h-screen flex flex-col items-center justify-center text-white p-6 text-center">
-      <h1 className="text-8xl font-black italic text-red-600 mb-4 tracking-tighter">BOGA</h1>
+      <div className="mb-8 flex flex-col items-center">
+        <div className="relative w-32 h-32 mb-4 animate-pulse">
+          <img
+            src="/boga.png"
+            alt="BOGA Logo"
+            className="w-full h-full object-contain"
+          />
+        </div>
+        <h1 className="text-8xl font-black italic text-red-600 mb-4 tracking-tighter">BOGA</h1>
+      </div>
       <p className="text-zinc-500 font-bold uppercase text-[10px] tracking-[0.5em] mb-12">Strength Tracker</p>
       <button onClick={login} className="bg-white text-black px-12 py-5 rounded-[2rem] font-black uppercase tracking-tighter shadow-2xl active:scale-95 transition-all">Google Login</button>
     </div>

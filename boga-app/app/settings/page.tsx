@@ -68,7 +68,12 @@ export default function SettingsPage() {
                 >
                     ← Back
                 </button>
-                <h1 className="text-xl font-black italic text-red-600 tracking-tighter">BOGA</h1>
+                <div className="flex items-center gap-3">
+                    <div className="relative w-10 h-10">
+                        <img src="/boga.png" alt="BOGA Logo" className="w-full h-full object-contain" />
+                    </div>
+                    <h1 className="text-xl font-black italic text-red-600 tracking-tighter">BOGA</h1>
+                </div>
             </header>
 
             <div className="max-w-md mx-auto">
@@ -127,8 +132,8 @@ export default function SettingsPage() {
                                         key={preset}
                                         onClick={() => setRestDuration(preset)}
                                         className={`py-3 rounded-xl font-black text-sm transition-all ${restDuration === preset
-                                                ? 'bg-red-600 text-white'
-                                                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                                            ? 'bg-red-600 text-white'
+                                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                                             }`}
                                     >
                                         {preset}s

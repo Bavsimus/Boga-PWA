@@ -103,23 +103,21 @@ export default function Dashboard() {
       <header className="flex justify-between items-center mb-12">
         <div className="flex items-center gap-4">
           {/* Logo Alanı */}
-          <div className="relative group">
-            {/* Arkadaki Doğal Parlama (Blur) */}
-            <div className="absolute inset-0 bg-red-600/20 blur-xl rounded-full group-hover:bg-red-600/30 transition-all duration-500" />
 
-            {/* Logo Image */}
-            <Image
-              src="/icon-192x192.png"
-              className="relative object-contain"
-              alt="BOGA Logo"
-              width={40}
-              height={40}
-              priority
-            />
-          </div>
 
           <div>
-            <h1 className="text-3xl font-black italic tracking-tighter text-red-600 leading-none">BOGA</h1>
+            <div className="flex items-center gap-3">
+              <div className="relative w-10 h-10">
+                <Image
+                  src="/boga.png"
+                  alt="BOGA Logo"
+                  fill
+                  className="object-contain"
+                  priority
+                />
+              </div>
+              <h1 className="text-3xl font-black italic tracking-tighter text-red-600 leading-none">BOGA</h1>
+            </div>
             <p className="text-[9px] text-zinc-500 uppercase tracking-[0.3em] mt-0.5">Training Systems</p>
           </div>
         </div>
