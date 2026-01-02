@@ -35,6 +35,26 @@ export default function ExercisePage() {
   const [isTimerActive, setIsTimerActive] = useState(false);
   const REST_DURATION = 90; // Saniye cinsinden dinlenme süresi
 
+  // Countdown timer effect
+  useEffect(() => {
+    if (!isTimerActive || restTime <= 0) {
+      if (restTime <= 0) setIsTimerActive(false);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setRestTime(prev => {
+        if (prev <= 1) {
+          setIsTimerActive(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isTimerActive, restTime]);
+
   const loadExercises = useCallback(async (uid: string, pId: string, dId: string) => {
     const data = await getExercises(uid, pId, dId);
     setExercises(data);
