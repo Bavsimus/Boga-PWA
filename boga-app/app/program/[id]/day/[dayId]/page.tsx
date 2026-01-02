@@ -8,7 +8,9 @@ import {
   finishWorkout,
   updateExercise,
   deleteExercise,
-  getUserSettings
+  getUserSettings,
+  recordWorkoutCompletion,
+  getDay
 } from "@/src/services/database";
 import { User, signInWithPopup } from "firebase/auth";
 // confetti import removed from top level to be imported dynamically
@@ -21,6 +23,7 @@ export default function ExercisePage() {
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
   const [completedSets, setCompletedSets] = useState<{ [key: string]: boolean }>({});
   const [loading, setLoading] = useState(true);
+  const [dayName, setDayName] = useState("");
 
   // Form State
   const [name, setName] = useState("");
@@ -58,8 +61,14 @@ export default function ExercisePage() {
   }, [isTimerActive, restTime]);
 
   const loadExercises = useCallback(async (uid: string, pId: string, dId: string) => {
-    const data = await getExercises(uid, pId, dId);
+    const [data, day] = await Promise.all([
+      getExercises(uid, pId, dId),
+      getDay(uid, pId, dId)
+    ]);
     setExercises(data);
+    if (day) {
+      setDayName(day.title || day.name || "");
+    }
   }, []);
 
   useEffect(() => {
@@ -152,7 +161,10 @@ export default function ExercisePage() {
     };
 
     try {
-      await finishWorkout(user.uid, summary);
+      await Promise.all([
+        finishWorkout(user.uid, summary),
+        recordWorkoutCompletion(user.uid, id as string, dayId as string, dayName)
+      ]);
       setTimeout(() => {
         setIsWorkoutActive(false);
         router.push(`/program/${id}`);

@@ -26,3 +26,17 @@ export interface UserSettings {
   restTimerEnabled: boolean;
   restDuration: number; // in seconds
 }
+
+export interface WorkoutCompletion {
+  id?: string;
+  completedAt: any; // Firestore Timestamp
+  programId: string;
+  dayId: string;
+  dayName: string;
+}
+
+export interface StreakData {
+  currentStreak: number;
+  longestStreak: number;
+  totalWorkouts: number;
+}

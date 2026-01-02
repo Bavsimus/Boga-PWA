@@ -7,11 +7,16 @@ import {
   getUserPrograms,
   getTotalWorkoutsCount,
   updateProgramName,
-  deleteProgram
+  deleteProgram,
+  getWorkoutCompletions
 } from "../src/services/database";
 import { User, signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import StreakCounter from "@/src/components/StreakCounter";
+import ActivityChart from "@/src/components/ActivityChart";
+import { calculateStreakData, getWeeklyStats } from "@/src/utils/streak-utils";
+import { WorkoutCompletion, StreakData } from "@/src/types/workout";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -28,14 +33,29 @@ export default function Dashboard() {
   const [editingProgram, setEditingProgram] = useState<{ id: string, name: string } | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
+  // Streak & Analytics States
+  const [completions, setCompletions] = useState<WorkoutCompletion[]>([]);
+  const [streakData, setStreakData] = useState<StreakData>({ currentStreak: 0, longestStreak: 0, totalWorkouts: 0 });
+  const [weeklyData, setWeeklyData] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+
   const loadInitialData = useCallback(async (uid: string) => {
     try {
-      const [progs, count] = await Promise.all([
+      const [progs, count, comps] = await Promise.all([
         getUserPrograms(uid),
-        getTotalWorkoutsCount(uid)
+        getTotalWorkoutsCount(uid),
+        getWorkoutCompletions(uid, 30)
       ]);
       setPrograms(progs);
       setWorkoutCount(count);
+      setCompletions(comps as WorkoutCompletion[]);
+
+      // Calculate streak data
+      const streak = calculateStreakData(comps as WorkoutCompletion[]);
+      setStreakData(streak);
+
+      // Calculate weekly stats
+      const weekly = getWeeklyStats(comps as WorkoutCompletion[], 7);
+      setWeeklyData(weekly);
     } catch (error) {
       console.error("Initial data load error:", error);
     }
@@ -135,6 +155,12 @@ export default function Dashboard() {
           )}
         </button>
       </header>
+
+      {/* --- STATS SECTION --- */}
+      <section className="mb-12 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <StreakCounter streakData={streakData} />
+        <ActivityChart weeklyData={weeklyData} />
+      </section>
 
       {/* --- PROGRAMS SECTION --- */}
       <section>

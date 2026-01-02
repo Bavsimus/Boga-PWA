@@ -47,6 +47,17 @@ export const getProgramDays = async (userId: string, programId: string) => {
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
+export const getDay = async (userId: string, programId: string, dayId: string) => {
+  const { doc, getDoc } = await import("firebase/firestore");
+  const dayRef = doc(db, "users", userId, "programs", programId, "days", dayId);
+  const daySnap = await getDoc(dayRef);
+  if (daySnap.exists()) {
+    return { id: daySnap.id, ...daySnap.data() };
+  } else {
+    return null;
+  }
+};
+
 export const addExercise = async (userId: string, programId: string, dayId: string, exerciseData: any) => {
   const exercisesRef = collection(db, "users", userId, "programs", programId, "days", dayId, "exercises");
   return await addDoc(exercisesRef, {
@@ -154,4 +165,44 @@ export const updateUserSettings = async (userId: string, settings: { restTimerEn
 
   const settingsRef = doc(db, "users", userId, "settings", "preferences");
   return await setDoc(settingsRef, settings, { merge: true });
+};
+
+// Workout Completion Tracking
+export const recordWorkoutCompletion = async (
+  userId: string,
+  programId: string,
+  dayId: string,
+  dayName: string
+) => {
+  const completionsRef = collection(db, "users", userId, "completions");
+  return await addDoc(completionsRef, {
+    completedAt: serverTimestamp(),
+    programId,
+    dayId,
+    dayName,
+  });
+};
+
+export const getWorkoutCompletions = async (userId: string, limit: number = 30) => {
+  const completionsRef = collection(db, "users", userId, "completions");
+  const q = query(completionsRef, orderBy("completedAt", "desc"));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+
+export const getCompletionsInRange = async (
+  userId: string,
+  startDate: Date,
+  endDate: Date
+) => {
+  const { Timestamp, where } = await import("firebase/firestore");
+  const completionsRef = collection(db, "users", userId, "completions");
+  const q = query(
+    completionsRef,
+    where("completedAt", ">=", Timestamp.fromDate(startDate)),
+    where("completedAt", "<=", Timestamp.fromDate(endDate)),
+    orderBy("completedAt", "desc")
+  );
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
