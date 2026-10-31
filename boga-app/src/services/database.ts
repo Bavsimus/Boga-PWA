@@ -1,5 +1,8 @@
 import { db } from "@/lib/firebase";
-import { collection, addDoc, serverTimestamp, getDocs, query, orderBy, getCountFromServer, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import {
+  collection, addDoc, serverTimestamp, getDocs, getDoc, setDoc, query, orderBy, limit as limitTo,
+  startAfter, where, Timestamp, getCountFromServer, doc, updateDoc, deleteDoc, QueryDocumentSnapshot
+} from "firebase/firestore";
 import { Program } from "../types/workout";
 
 
@@ -22,7 +25,6 @@ export const getUserPrograms = async (userId: string) => {
 };
 
 export const getProgram = async (userId: string, programId: string) => {
-  const { doc, getDoc } = await import("firebase/firestore");
   const programRef = doc(db, "users", userId, "programs", programId);
   const programSnap = await getDoc(programRef);
   if (programSnap.exists()) {
@@ -48,8 +50,7 @@ export const getProgramDays = async (userId: string, programId: string) => {
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
-export const getDay = async (userId: string, programId: string, dayId: string) => {
-  const { doc, getDoc } = await import("firebase/firestore");
+export const getDay = async (userId: string, programId: string, dayId: string): Promise<any | null> => {
   const dayRef = doc(db, "users", userId, "programs", programId, "days", dayId);
   const daySnap = await getDoc(dayRef);
   if (daySnap.exists()) {
@@ -93,55 +94,56 @@ export const updateProgramName = async (userId: string, programId: string, newNa
   return await updateDoc(programRef, { name: newName });
 };
 
+// Firestore doesn't delete subcollections with their parent, so clean up days and exercises first
 export const deleteProgram = async (userId: string, programId: string) => {
+  const daysSnap = await getDocs(collection(db, "users", userId, "programs", programId, "days"));
+  await Promise.all(daysSnap.docs.map(d => deleteDay(userId, programId, d.id)));
   const programRef = doc(db, "users", userId, "programs", programId);
   return await deleteDoc(programRef);
 };
 
 // --- GÜNLER İÇİN ---
 export const updateDayName = async (userId: string, programId: string, dayId: string, newName: string) => {
-  const { db } = await import("@/lib/firebase");
   const dayRef = doc(db, "users", userId, "programs", programId, "days", dayId);
-  return await updateDoc(dayRef, { name: newName });
+  // Days are created with `title`; older renames wrote `name`, so keep both in sync
+  return await updateDoc(dayRef, { title: newName, name: newName });
 };
 
 export const deleteDay = async (userId: string, programId: string, dayId: string) => {
-  const { db } = await import("@/lib/firebase");
+  const exercisesSnap = await getDocs(collection(db, "users", userId, "programs", programId, "days", dayId, "exercises"));
+  await Promise.all(exercisesSnap.docs.map(e => deleteDoc(e.ref)));
   const dayRef = doc(db, "users", userId, "programs", programId, "days", dayId);
   return await deleteDoc(dayRef);
 };
 
 // --- HAREKETLER İÇİN ---
 export const updateExercise = async (userId: string, programId: string, dayId: string, exId: string, data: any) => {
-  const { db } = await import("@/lib/firebase");
   const exRef = doc(db, "users", userId, "programs", programId, "days", dayId, "exercises", exId);
   return await updateDoc(exRef, data);
 };
 
 export const deleteExercise = async (userId: string, programId: string, dayId: string, exId: string) => {
-  const { db } = await import("@/lib/firebase");
   const exRef = doc(db, "users", userId, "programs", programId, "days", dayId, "exercises", exId);
   return await deleteDoc(exRef);
 };
 
-export const getWorkoutHistory = async (userId: string) => {
-  const { db } = await import("@/lib/firebase");
-  const { collection } = await import("firebase/firestore");
-
+// Paginated: pass the returned cursor back in to load the next page
+export const getWorkoutHistory = async (userId: string, pageSize: number = 20, cursor?: QueryDocumentSnapshot | null) => {
   const logsRef = collection(db, "users", userId, "logs");
-  const q = query(logsRef, orderBy("completedAt", "desc")); // En yeni en üstte
+  const q = cursor
+    ? query(logsRef, orderBy("completedAt", "desc"), startAfter(cursor), limitTo(pageSize))
+    : query(logsRef, orderBy("completedAt", "desc"), limitTo(pageSize)); // En yeni en üstte
   const querySnapshot = await getDocs(q);
 
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
+  return {
+    logs: querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[],
+    cursor: querySnapshot.docs[querySnapshot.docs.length - 1] || null,
+    hasMore: querySnapshot.docs.length === pageSize,
+  };
 };
 
 // --- USER SETTINGS ---
 export const getUserSettings = async (userId: string) => {
-  const { db } = await import("@/lib/firebase");
-  const { doc, getDoc, setDoc } = await import("firebase/firestore");
 
   const settingsRef = doc(db, "users", userId, "settings", "preferences");
   const settingsSnap = await getDoc(settingsRef);
@@ -161,8 +163,6 @@ export const getUserSettings = async (userId: string) => {
 };
 
 export const updateUserSettings = async (userId: string, settings: { restTimerEnabled: boolean; restDuration: number }) => {
-  const { db } = await import("@/lib/firebase");
-  const { doc, setDoc } = await import("firebase/firestore");
 
   const settingsRef = doc(db, "users", userId, "settings", "preferences");
   return await setDoc(settingsRef, settings, { merge: true });
@@ -196,7 +196,6 @@ export const getCompletionsInRange = async (
   startDate: Date,
   endDate: Date
 ) => {
-  const { Timestamp, where } = await import("firebase/firestore");
   const completionsRef = collection(db, "users", userId, "completions");
   const q = query(
     completionsRef,
@@ -210,7 +209,6 @@ export const getCompletionsInRange = async (
 
 // Profile Management
 export const createAutoProfile = async (userId: string, displayName: string, email: string) => {
-  const { setDoc } = await import("firebase/firestore");
 
   // Generate username from email or random
   let baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -248,7 +246,6 @@ export const createAutoProfile = async (userId: string, displayName: string, ema
 };
 
 export const createUserProfile = async (userId: string, username: string, displayName: string) => {
-  const { setDoc } = await import("firebase/firestore");
 
   // Check username availability
   const isAvailable = await checkUsernameAvailability(username);
@@ -278,15 +275,13 @@ export const createUserProfile = async (userId: string, username: string, displa
 };
 
 export const checkUsernameAvailability = async (username: string): Promise<boolean> => {
-  const { doc, getDoc } = await import("firebase/firestore");
   const usernameLower = username.toLowerCase();
   const usernameRef = doc(db, "usernames", usernameLower);
   const usernameSnap = await getDoc(usernameRef);
   return !usernameSnap.exists();
 };
 
-export const getUserProfile = async (userId: string) => {
-  const { doc, getDoc } = await import("firebase/firestore");
+export const getUserProfile = async (userId: string): Promise<any | null> => {
   const profileRef = doc(db, "users", userId);
   const profileSnap = await getDoc(profileRef);
   if (profileSnap.exists()) {
@@ -296,7 +291,6 @@ export const getUserProfile = async (userId: string) => {
 };
 
 export const getUserByUsername = async (username: string) => {
-  const { doc, getDoc } = await import("firebase/firestore");
   const usernameLower = username.toLowerCase();
 
   // Get userId from username
@@ -321,7 +315,6 @@ export const updateUserProfile = async (
     showPrograms?: boolean;
   }
 ) => {
-  const { setDoc } = await import("firebase/firestore");
   const profileRef = doc(db, "users", userId);
   return await setDoc(profileRef, updates, { merge: true });
 };

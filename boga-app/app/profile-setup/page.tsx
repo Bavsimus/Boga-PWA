@@ -4,6 +4,7 @@ import { auth } from "@/lib/firebase";
 import { User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { getUserProfile, createUserProfile, checkUsernameAvailability } from "@/src/services/database";
+import { Icon, LoadingScreen, Logo } from "@/src/components/ui";
 
 export default function ProfileSetupPage() {
     const router = useRouter();
@@ -92,115 +93,79 @@ export default function ProfileSetupPage() {
         }
     };
 
-    if (!user) {
-        return (
-            <div className="bg-black min-h-screen flex items-center justify-center text-white">
-                <p className="italic tracking-widest font-black uppercase">Loading...</p>
-            </div>
-        );
-    }
+    if (!user) return <LoadingScreen />;
 
     return (
-        <main className="min-h-screen bg-black text-white p-6">
-            <div className="max-w-md mx-auto pt-12">
+        <main className="min-h-screen text-white px-5 max-w-md mx-auto">
+            <div className="pt-10 animate-rise-in">
                 {/* Header */}
-                <div className="text-center mb-12">
-                    <h1 className="text-5xl font-black italic text-red-600 tracking-tighter mb-2">
-                        Welcome to BOGA
-                    </h1>
-                    <p className="text-zinc-500 text-sm font-bold uppercase tracking-wider">
-                        Set up your profile
-                    </p>
+                <div className="text-center mb-10">
+                    <div className="flex justify-center mb-6"><Logo size={56} withText={false} /></div>
+                    <h1 className="text-3xl font-bold tracking-tight">Welcome to BOGA</h1>
+                    <p className="text-zinc-500 mt-2">Pick a name and handle for your profile.</p>
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Display Name */}
-                    <div className="bg-zinc-900/40 border border-zinc-800 p-6 rounded-[2rem]">
-                        <label className="block text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-black mb-3">
-                            Display Name
-                        </label>
+                <form onSubmit={handleSubmit} className="space-y-5">
+                    <label className="block">
+                        <span className="text-xs font-medium text-zinc-500 ml-1">Display name</span>
                         <input
                             type="text"
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
                             placeholder="John Doe"
-                            className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 text-white font-bold text-lg"
+                            className="input mt-1"
                             maxLength={50}
                             required
                         />
-                        <p className="text-zinc-600 text-[10px] mt-2 font-bold">
-                            Your public name shown on your profile
-                        </p>
-                    </div>
+                    </label>
 
-                    {/* Username */}
-                    <div className="bg-zinc-900/40 border border-zinc-800 p-6 rounded-[2rem]">
-                        <label className="block text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-black mb-3">
-                            Username
-                        </label>
-                        <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 font-black text-lg">
-                                @
-                            </span>
+                    <label className="block">
+                        <span className="text-xs font-medium text-zinc-500 ml-1">Username</span>
+                        <div className="relative mt-1">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 font-medium">@</span>
                             <input
                                 type="text"
                                 value={username}
                                 onChange={handleUsernameChange}
                                 placeholder="johndoe"
-                                className="w-full bg-black border border-zinc-800 p-4 pl-10 rounded-2xl outline-none focus:border-red-600 text-white font-bold text-lg"
+                                className="input !pl-9 !pr-11"
                                 minLength={3}
                                 maxLength={20}
+                                autoCapitalize="none"
+                                autoCorrect="off"
                                 required
                             />
-                            {isChecking && (
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                                    <div className="w-5 h-5 border-2 border-zinc-600 border-t-red-600 rounded-full animate-spin" />
-                                </div>
-                            )}
-                            {!isChecking && isAvailable === true && (
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-green-500 text-xl">
-                                    ✓
-                                </div>
-                            )}
-                            {!isChecking && isAvailable === false && (
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-red-500 text-xl">
-                                    ✗
-                                </div>
-                            )}
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                {isChecking && <div className="w-4 h-4 border-2 border-zinc-600 border-t-red-500 rounded-full animate-spin" />}
+                                {!isChecking && isAvailable === true && <Icon name="check" size={18} className="text-green-400" strokeWidth={2.5} />}
+                                {!isChecking && isAvailable === false && <Icon name="close" size={18} className="text-red-400" strokeWidth={2.5} />}
+                            </div>
                         </div>
-                        <p className="text-zinc-600 text-[10px] mt-2 font-bold">
-                            3-20 characters, letters, numbers, and underscores only
-                        </p>
-                        {isAvailable === false && (
-                            <p className="text-red-500 text-xs mt-2 font-bold">
-                                Username already taken
-                            </p>
-                        )}
-                    </div>
+                        <span className={`block text-xs mt-1.5 ml-1 ${isAvailable === false ? "text-red-400" : "text-zinc-600"}`}>
+                            {isAvailable === false ? "That username is taken" : "3-20 characters: letters, numbers and underscores"}
+                        </span>
+                    </label>
 
                     {/* Error */}
                     {error && (
-                        <div className="bg-red-600/10 border border-red-600/30 p-4 rounded-2xl">
-                            <p className="text-red-500 text-sm font-bold text-center">{error}</p>
-                        </div>
+                        <div className="rounded-2xl bg-red-600/10 border border-red-600/25 px-4 py-3 text-sm text-red-400 text-center">{error}</div>
                     )}
 
                     {/* Submit */}
                     <button
                         type="submit"
                         disabled={isCreating || !isAvailable || !displayName.trim()}
-                        className="w-full bg-red-600 text-white font-black py-5 rounded-[2rem] text-xl shadow-2xl active:scale-95 transition-all uppercase italic tracking-tighter disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="btn btn-primary w-full h-14 text-base !mt-8"
                     >
                         {isCreating ? "Creating..." : "Create Profile"}
                     </button>
                 </form>
 
                 {/* Info */}
-                <div className="mt-8 text-center text-zinc-600 text-xs">
-                    <p className="mb-2">Your profile will be <span className="text-red-600 font-bold">public</span> by default</p>
-                    <p>You can change privacy settings later</p>
-                </div>
+                <p className="mt-6 text-center text-xs text-zinc-600 leading-relaxed">
+                    Your profile is <span className="text-zinc-400 font-medium">public</span> by default.<br />You can change this anytime in Settings.
+                </p>
             </div>
         </main>
     );

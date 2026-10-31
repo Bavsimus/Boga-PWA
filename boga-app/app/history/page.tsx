@@ -2,65 +2,122 @@
 import { useState, useEffect } from "react";
 import { auth } from "@/lib/firebase";
 import { getWorkoutHistory } from "@/src/services/database";
-import { useRouter } from "next/navigation";
+import { BottomNav, EmptyState, Icon, LoadingScreen, LoginScreen, PageHeader } from "@/src/components/ui";
+import { User } from "firebase/auth";
+import { QueryDocumentSnapshot } from "firebase/firestore";
+
+const monthKey = (d: Date) => d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
 export default function HistoryPage() {
+  const [user, setUser] = useState<User | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [cursor, setCursor] = useState<QueryDocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        const data = await getWorkoutHistory(user.uid);
-        setLogs(data);
+    const unsub = auth.onAuthStateChanged(async (u) => {
+      setUser(u);
+      if (u) {
+        const page = await getWorkoutHistory(u.uid);
+        setLogs(page.logs);
+        setCursor(page.cursor);
+        setHasMore(page.hasMore);
       }
       setLoading(false);
     });
     return () => unsub();
   }, []);
 
-  if (loading) return <div className="bg-black min-h-screen flex items-center justify-center text-white font-black italic">LOADING HISTORY...</div>;
+  const loadMore = async () => {
+    if (!user || !cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await getWorkoutHistory(user.uid, 20, cursor);
+      setLogs(prev => [...prev, ...page.logs]);
+      setCursor(page.cursor);
+      setHasMore(page.hasMore);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  if (loading) return <LoadingScreen />;
+  if (!user) return <LoginScreen />;
+
+  // Group sessions by month for a cleaner timeline
+  const groups: { month: string; items: any[] }[] = [];
+  logs.forEach((log) => {
+    const date: Date | undefined = log.completedAt?.toDate?.();
+    const month = date ? monthKey(date) : "Unknown";
+    const last = groups[groups.length - 1];
+    if (last && last.month === month) last.items.push(log);
+    else groups.push({ month, items: [log] });
+  });
 
   return (
-    <main className="min-h-screen bg-black text-white p-6">
-      <header className="flex items-center justify-between mb-10">
-        <button onClick={() => router.back()} className="text-zinc-500 text-xs font-bold uppercase tracking-widest">← Back</button>
-        <h1 className="text-xl font-black italic text-red-600">HISTORY</h1>
-      </header>
+    <main className="min-h-screen text-white px-5 max-w-2xl mx-auto !pb-32">
+      <PageHeader subtitle="Your sessions" title="History" />
 
-      <div className="space-y-6">
-        {logs.length === 0 ? (
-          <p className="text-zinc-600 italic text-center py-20">No workouts recorded yet. Get to work!</p>
-        ) : (
-          logs.map((log) => (
-            <div key={log.id} className="bg-zinc-900/50 border border-zinc-800 rounded-[2rem] p-6">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <p className="text-[10px] text-red-500 font-black uppercase tracking-widest">
-                    {log.completedAt?.toDate().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
-                  <h3 className="text-xl font-black italic uppercase tracking-tighter mt-1">Workout Session</h3>
-                </div>
-                <span className="bg-zinc-800 text-zinc-400 text-[9px] px-3 py-1 rounded-full font-bold uppercase">
-                   {log.completedAt?.toDate().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
+      {logs.length === 0 ? (
+        <EmptyState icon="history" title="No workouts yet" text="Finish your first workout and it will show up here." />
+      ) : (
+        <div className="space-y-8">
+          {groups.map((group) => (
+            <section key={group.month}>
+              <p className="eyebrow mb-3">{group.month}</p>
+              <div className="space-y-3">
+                {group.items.map((log) => {
+                  const date: Date | undefined = log.completedAt?.toDate?.();
+                  const totalSets = log.exercises?.reduce((s: number, ex: any) => s + (ex.completedSets || 0), 0) || 0;
+                  const minutes = log.durationSeconds ? Math.max(1, Math.round(log.durationSeconds / 60)) : null;
 
-              <div className="space-y-2 border-t border-zinc-800 pt-4">
-                {log.exercises?.map((ex: any, i: number) => (
-                  <div key={i} className="flex justify-between items-center text-sm">
-                    <span className="text-zinc-300 font-bold uppercase tracking-tight">{ex.name}</span>
-                    <span className="text-zinc-500 font-black italic">
-                      {ex.completedSets} SETS • {ex.weight} KG
-                    </span>
-                  </div>
-                ))}
+                  return (
+                    <article key={log.id} className="card p-5 animate-rise-in">
+                      <div className="flex items-start gap-4">
+                        {date && (
+                          <div className="w-12 shrink-0 text-center rounded-2xl bg-red-600/10 border border-red-600/20 py-1.5">
+                            <p className="text-[10px] font-semibold uppercase text-red-400 leading-none">{date.toLocaleDateString('en-US', { weekday: 'short' })}</p>
+                            <p className="text-xl font-bold tabular leading-tight">{date.getDate()}</p>
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-[17px] tracking-tight truncate">{log.dayName || "Workout Session"}</h3>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-zinc-500">
+                            {date && <span className="tabular">{date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>}
+                            <span className="flex items-center gap-1 tabular"><Icon name="check" size={12} /> {totalSets} sets</span>
+                            {minutes && <span className="flex items-center gap-1 tabular"><Icon name="timer" size={12} /> {minutes} min</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {log.exercises?.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
+                          {log.exercises.map((ex: any, i: number) => (
+                            <div key={i} className="flex justify-between items-center gap-3 text-sm">
+                              <span className="text-zinc-300 truncate">{ex.name}</span>
+                              <span className="text-zinc-500 tabular shrink-0">{ex.completedSets} × {ex.weight} kg</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
-            </div>
-          ))
-        )}
-      </div>
+            </section>
+          ))}
+
+          {hasMore && (
+            <button onClick={loadMore} disabled={loadingMore} className="btn btn-ghost w-full h-12">
+              {loadingMore ? "Loading..." : "Load older sessions"}
+            </button>
+          )}
+        </div>
+      )}
+
+      <BottomNav />
     </main>
   );
 }

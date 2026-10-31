@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { auth } from "@/lib/firebase";
-import Image from "next/image";
 import {
   createProgram,
   getUserPrograms,
@@ -17,6 +16,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import StreakCounter from "@/src/components/StreakCounter";
 import ActivityChart from "@/src/components/ActivityChart";
+import { Avatar, BottomNav, EmptyState, Icon, LoadingScreen, LoginScreen, Logo, Sheet } from "@/src/components/ui";
 import { calculateStreakData, getWeeklyStats } from "@/src/utils/streak-utils";
 import { WorkoutCompletion, StreakData } from "@/src/types/workout";
 
@@ -70,36 +70,27 @@ export default function Dashboard() {
     const unsubscribe = auth.onAuthStateChanged(async (u) => {
       setUser(u);
       if (u) {
-        try {
-          // Check if user has profile
-          let profile = await getUserProfile(u.uid);
-          if (!profile || !(profile as any).username) {
-            // Auto-create profile on first login
-            console.log("Creating auto profile for new user...");
-            const autoUsername = await createAutoProfile(
-              u.uid,
-              u.displayName || "BOGA User",
-              u.email || ""
-            );
-            console.log("Profile created with username:", autoUsername);
-            setUsername(autoUsername);
-            // Reload profile to confirm
-            profile = await getUserProfile(u.uid);
-          } else {
-            setUsername((profile as any).username || "");
-          }
-
-          // Load user data
-          await loadInitialData(u.uid);
-        } catch (error) {
-          console.error("Error in auth flow:", error);
-          // Still try to load data even if profile creation failed
+        // Profile check and dashboard data don't depend on each other, so load them in parallel
+        const ensureProfile = async () => {
           try {
-            await loadInitialData(u.uid);
-          } catch (dataError) {
-            console.error("Error loading data:", dataError);
+            const profile = await getUserProfile(u.uid);
+            if (!profile || !profile.username) {
+              // Auto-create profile on first login
+              const autoUsername = await createAutoProfile(
+                u.uid,
+                u.displayName || "BOGA User",
+                u.email || ""
+              );
+              setUsername(autoUsername);
+            } else {
+              setUsername(profile.username);
+            }
+          } catch (error) {
+            console.error("Error in profile setup:", error);
           }
-        }
+        };
+
+        await Promise.all([ensureProfile(), loadInitialData(u.uid)]);
       }
       setLoading(false);
     });
@@ -107,10 +98,10 @@ export default function Dashboard() {
   }, [loadInitialData]);
 
   const handleCreate = async () => {
-    if (!user || !newProgramName || isCreating) return;
+    if (!user || !newProgramName.trim() || isCreating) return;
     setIsCreating(true);
     try {
-      await createProgram(user.uid, newProgramName);
+      await createProgram(user.uid, newProgramName.trim());
       setNewProgramName("");
       setIsModalOpen(false);
       await loadInitialData(user.uid);
@@ -133,7 +124,7 @@ export default function Dashboard() {
   };
 
   const handleDelete = async (pId: string) => {
-    if (!user || !window.confirm("Are you sure you want to delete this program?")) return;
+    if (!user || !window.confirm("Delete this program and all of its training days?")) return;
     try {
       await deleteProgram(user.uid, pId);
       setIsEditModalOpen(false);
@@ -143,233 +134,151 @@ export default function Dashboard() {
     }
   };
 
-  if (loading) return (
-    <div className="bg-black min-h-screen flex items-center justify-center text-white italic tracking-[0.3em] font-black">
-      BOGA IS LOADING...
-    </div>
-  );
+  if (loading) return <LoadingScreen variant="dashboard" />;
 
   if (!user) return <LoginScreen />;
 
+  const hour = new Date().getHours();
+  const greeting = hour < 5 ? "Late night grind" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const firstName = user.displayName?.split(" ")[0] || "Athlete";
+
   return (
-    <main className="min-h-screen bg-black text-white p-6 font-sans">
+    <main className="min-h-screen text-white px-5 max-w-2xl mx-auto !pb-32">
       {/* --- HEADER --- */}
-      <header className="flex justify-between items-center mb-12">
-        <div className="flex items-center gap-4">
-          {/* Logo Alanı */}
-
-
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="relative w-10 h-10">
-                <Image
-                  src="/boga.png"
-                  alt="BOGA Logo"
-                  fill
-                  className="object-contain"
-                  priority
-                />
-              </div>
-              <h1 className="text-3xl font-black italic tracking-tighter text-red-600 leading-none">BOGA</h1>
-            </div>
-            <p className="text-[9px] text-zinc-500 uppercase tracking-[0.3em] mt-0.5">Training Systems</p>
-          </div>
-        </div>
-
-        <button
-          onClick={() => setIsProfileOpen(true)}
-          className="w-12 h-12 rounded-full border-2 border-zinc-800 overflow-hidden active:scale-90 transition-all shadow-lg shadow-red-600/10"
-        >
-          {user.photoURL ? (
-            <img src={user.photoURL} alt="profile" className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full bg-zinc-800 flex items-center justify-center font-bold text-zinc-400">
-              {user.displayName?.charAt(0) || "U"}
-            </div>
-          )}
+      <header className="flex justify-between items-center mb-8 animate-rise-in">
+        <Logo size={34} />
+        <button onClick={() => setIsProfileOpen(true)} className="active:scale-95 transition-transform" aria-label="Account">
+          <Avatar src={user.photoURL} name={user.displayName} size={40} />
         </button>
       </header>
 
+      <section className="mb-6 animate-rise-in" style={{ animationDelay: "40ms" }}>
+        <p className="text-zinc-500 text-sm font-medium">{greeting},</p>
+        <h1 className="text-3xl font-bold tracking-tight mt-0.5">{firstName}</h1>
+      </section>
+
       {/* --- STATS SECTION --- */}
-      <section className="mb-12 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <section className="mb-10 grid grid-cols-1 md:grid-cols-2 gap-4 animate-rise-in" style={{ animationDelay: "80ms" }}>
         <StreakCounter streakData={streakData} />
         <ActivityChart weeklyData={weeklyData} />
       </section>
 
       {/* --- PROGRAMS SECTION --- */}
-      <section>
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-zinc-500 text-xs uppercase tracking-[0.2em] font-black">Your Programs</h2>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-zinc-900 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase border border-zinc-800 active:scale-95 transition-all"
-          >
-            + New Program
+      <section className="animate-rise-in" style={{ animationDelay: "120ms" }}>
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <p className="eyebrow">Your Programs</p>
+            <p className="text-sm text-zinc-500 mt-1">{programs.length} {programs.length === 1 ? "program" : "programs"}</p>
+          </div>
+          <button onClick={() => setIsModalOpen(true)} className="btn btn-ghost h-10 px-4 text-sm">
+            <Icon name="plus" size={16} /> New
           </button>
         </div>
 
-        <div className="grid gap-4">
+        <div className="grid gap-3">
           {programs.length === 0 ? (
-            <div className="border border-zinc-900 border-dashed p-12 rounded-[2.5rem] text-center text-zinc-700 italic text-sm">
-              No programs yet.
-            </div>
+            <EmptyState
+              icon="dumbbell"
+              title="No programs yet"
+              text="Create your first program and add training days to get started."
+              action={<button onClick={() => setIsModalOpen(true)} className="btn btn-primary h-11 px-5 text-sm"><Icon name="plus" size={16} /> Create Program</button>}
+            />
           ) : (
-            programs.map((p) => (
-              <div key={p.id} className="relative group">
-                <div
-                  onClick={() => router.push(`/program/${p.id}`)}
-                  className="bg-zinc-900/40 border border-zinc-800 p-7 rounded-[2.5rem] flex justify-between items-center active:scale-[0.98] transition-all cursor-pointer group-hover:border-zinc-700"
-                >
-                  <div>
-                    <h3 className="text-xl font-black italic uppercase tracking-tight group-hover:text-red-600 transition-colors">
-                      {p.name}
-                    </h3>
-                    <p className="text-[10px] text-zinc-600 uppercase mt-1 tracking-widest font-bold">Manage days</p>
+            programs.map((p, i) => (
+              <div key={p.id} className="relative">
+                <Link href={`/program/${p.id}`} className="card card-interactive flex items-center gap-4 p-4 pr-24">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-500/20 to-red-900/10 border border-red-500/20 flex items-center justify-center text-red-400 font-bold tabular shrink-0">
+                    {String(i + 1).padStart(2, "0")}
                   </div>
-                  <div className="text-red-600 font-black text-2xl pr-8">→</div>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-[17px] tracking-tight truncate">{p.name}</h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">View training days</p>
+                  </div>
+                </Link>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      setEditingProgram({ id: p.id, name: p.name });
+                      setIsEditModalOpen(true);
+                    }}
+                    className="icon-btn !bg-transparent !border-transparent"
+                    aria-label="Edit program"
+                  >
+                    <Icon name="more" size={18} />
+                  </button>
+                  <Icon name="chevron" size={18} className="text-zinc-600 pointer-events-none" />
                 </div>
-
-                {/* Edit Icon Button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingProgram({ id: p.id, name: p.name });
-                    setIsEditModalOpen(true);
-                  }}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 p-3 text-zinc-700 hover:text-white transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>
-                </button>
               </div>
             ))
           )}
         </div>
       </section>
 
-      {/* --- PROFILE DRAWER --- */}
-      {isProfileOpen && (
-        <div className="fixed inset-0 z-[100] flex justify-end">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsProfileOpen(false)} />
-          <div className="relative w-full max-w-[320px] bg-zinc-950 h-full p-8 border-l border-zinc-800 flex flex-col shadow-2xl animate-in slide-in-from-right">
-            <button onClick={() => setIsProfileOpen(false)} className="self-end text-zinc-600 font-black text-xs mb-12">CLOSE ✕</button>
-            <div className="flex items-center gap-4 mb-10">
-              <div className="w-14 h-14 rounded-2xl bg-red-600 flex items-center justify-center text-2xl font-black italic shadow-[0_0_20px_rgba(220,38,38,0.3)]">{user.displayName?.charAt(0)}</div>
-              <div>
-                <h3 className="text-lg font-black italic uppercase tracking-tight">{user.displayName}</h3>
-                <p className="text-[9px] text-zinc-600 font-bold uppercase">{user.email}</p>
-              </div>
-            </div>
-            <div className="space-y-3 flex-1">
-              <div className="p-5 bg-red-600/10 rounded-[2rem] border border-red-600/20 mb-4">
-                <p className="text-[9px] text-red-500 uppercase font-black mb-1 tracking-widest">Total Workouts Done</p>
-                <div className="flex items-baseline gap-2">
-                  <p className="text-3xl font-black italic tracking-tighter text-white">{workoutCount}</p>
-                  <p className="text-zinc-500 text-[10px] font-bold uppercase">Sessions</p>
-                </div>
-              </div>
-              <div className="p-5 bg-zinc-900/50 rounded-[2rem] border border-zinc-800">
-                <p className="text-[9px] text-zinc-600 uppercase font-black mb-1 tracking-widest">Language</p>
-                <p className="text-sm font-bold italic">English (Global)</p>
-              </div>
-            </div>
-            <button
-              onClick={() => username && router.push(`/profile/${username}`)}
-              className="w-full py-5 mb-3 bg-zinc-900 text-white font-black uppercase text-[10px] border border-zinc-800 rounded-[2rem] active:scale-95 transition-all tracking-widest flex items-center justify-center gap-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-              My Profile
-            </button>
-            <button
-              onClick={() => router.push("/settings")}
-              className="w-full py-5 mb-3 bg-zinc-900 text-white font-black uppercase text-[10px] border border-zinc-800 rounded-[2rem] active:scale-95 transition-all tracking-widest flex items-center justify-center gap-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M12 1v6m0 6v6m-6-6h6m6 0h-6m-3.5-8.5 4 4m4 4 4 4m-16 0 4-4m4-4 4-4" /></svg>
-              Settings
-            </button>
-            <button
-              onClick={() => router.push("/history")}
-              className="w-full py-5 mb-3 bg-zinc-900 text-white font-black uppercase text-[10px] border border-zinc-800 rounded-[2rem] active:scale-95 transition-all tracking-widest flex items-center justify-center gap-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-              View Workout History
-            </button>
-            <button onClick={() => signOut(auth)} className="w-full py-5 text-red-600 font-black uppercase text-[10px] border border-red-900/30 rounded-[2rem] bg-red-950/10 active:scale-95 transition-all">Sign Out Session</button>
+      <BottomNav username={username} />
+
+      {/* --- ACCOUNT SHEET --- */}
+      <Sheet open={isProfileOpen} onClose={() => setIsProfileOpen(false)}>
+        <div className="flex items-center gap-4 mb-6">
+          <Avatar src={user.photoURL} name={user.displayName} size={56} />
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold tracking-tight truncate">{user.displayName}</h3>
+            <p className="text-sm text-zinc-500 truncate">{username ? `@${username}` : user.email}</p>
           </div>
         </div>
-      )}
-
-      {/* --- NEW PROGRAM MODAL --- */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsModalOpen(false)} />
-          <div className="relative bg-zinc-900 w-full max-w-sm rounded-[2.5rem] p-8 border border-zinc-800 shadow-2xl">
-            <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-6 text-red-600">New Program</h3>
-            <input
-              autoFocus
-              className="w-full bg-black border border-zinc-800 p-5 rounded-2xl mb-6 outline-none focus:border-red-600 text-white font-bold"
-              placeholder="e.g. POWERLIFTING 101"
-              value={newProgramName}
-              onChange={(e) => setNewProgramName(e.target.value)}
-            />
-            <div className="flex gap-4">
-              <button onClick={() => setIsModalOpen(false)} className="flex-1 text-zinc-600 font-black uppercase text-[10px]">Cancel</button>
-              <button onClick={handleCreate} disabled={isCreating} className="flex-[2] bg-white text-black py-4 rounded-2xl font-black uppercase text-xs disabled:opacity-50">
-                {isCreating ? 'Creating...' : 'Create Program'}
-              </button>
-            </div>
-          </div>
+        <div className="card p-4 mb-4 flex items-center justify-between">
+          <span className="text-sm text-zinc-400">Total workouts logged</span>
+          <span className="text-xl font-bold tabular">{workoutCount}</span>
         </div>
-      )}
+        <div className="grid gap-2">
+          <button onClick={() => username && router.push(`/profile/${username}`)} className="btn btn-ghost h-12 !justify-start px-4">
+            <Icon name="user" size={18} /> My Profile
+          </button>
+          <button onClick={() => router.push("/history")} className="btn btn-ghost h-12 !justify-start px-4">
+            <Icon name="history" size={18} /> Workout History
+          </button>
+          <button onClick={() => router.push("/settings")} className="btn btn-ghost h-12 !justify-start px-4">
+            <Icon name="settings" size={18} /> Settings
+          </button>
+          <button onClick={() => signOut(auth)} className="btn btn-danger h-12 !justify-start px-4 mt-2">
+            <Icon name="logout" size={18} /> Sign Out
+          </button>
+        </div>
+      </Sheet>
 
-      {/* --- EDIT PROGRAM MODAL --- */}
-      {isEditModalOpen && editingProgram && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6">
-          <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={() => setIsEditModalOpen(false)} />
-          <div className="relative bg-zinc-900 w-full max-w-sm rounded-[2.5rem] p-8 border border-zinc-800 shadow-2xl">
-            <h3 className="text-xl font-black italic uppercase text-white mb-6">Edit Program</h3>
+      {/* --- NEW PROGRAM SHEET --- */}
+      <Sheet open={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Program">
+        <form onSubmit={(e) => { e.preventDefault(); handleCreate(); }}>
+          <input
+            autoFocus
+            className="input mb-4"
+            placeholder="e.g. Push Pull Legs"
+            value={newProgramName}
+            onChange={(e) => setNewProgramName(e.target.value)}
+          />
+          <button type="submit" disabled={isCreating || !newProgramName.trim()} className="btn btn-primary w-full h-12">
+            {isCreating ? "Creating..." : "Create Program"}
+          </button>
+        </form>
+      </Sheet>
+
+      {/* --- EDIT PROGRAM SHEET --- */}
+      <Sheet open={isEditModalOpen && !!editingProgram} onClose={() => setIsEditModalOpen(false)} title="Edit Program">
+        {editingProgram && (
+          <form onSubmit={(e) => { e.preventDefault(); handleUpdate(); }}>
             <input
-              className="w-full bg-black border border-zinc-800 p-5 rounded-2xl mb-6 outline-none focus:border-red-600 text-white font-bold"
+              className="input mb-4"
               value={editingProgram.name}
               onChange={(e) => setEditingProgram({ ...editingProgram, name: e.target.value })}
             />
-            <div className="flex flex-col gap-3">
-              <button onClick={handleUpdate} className="w-full bg-white text-black py-4 rounded-2xl font-black uppercase text-xs active:scale-95 transition-all">Save Changes</button>
-              <button onClick={() => handleDelete(editingProgram.id)} className="w-full py-4 text-red-600 font-black uppercase text-[10px] tracking-widest border border-red-900/30 rounded-2xl">Delete Program</button>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-zinc-600 font-bold uppercase text-[10px] mt-2">Cancel</button>
+            <div className="grid gap-2">
+              <button type="submit" disabled={!editingProgram.name.trim()} className="btn btn-light h-12">Save Changes</button>
+              <button type="button" onClick={() => handleDelete(editingProgram.id)} className="btn btn-danger h-12">
+                <Icon name="trash" size={16} /> Delete Program
+              </button>
             </div>
-          </div>
-        </div>
-      )}
+          </form>
+        )}
+      </Sheet>
     </main>
-  );
-}
-
-function LoginScreen() {
-  const login = async () => {
-    const { auth, googleProvider } = await import("@/lib/firebase");
-    const { signInWithPopup } = await import("firebase/auth");
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (err) {
-      console.error("Login failed:", err);
-    }
-  };
-
-  return (
-    <div className="bg-black min-h-screen flex flex-col items-center justify-center text-white p-6 text-center">
-      <div className="mb-8 relative w-48 h-48 animate-pulse">
-        <img
-          src="/boga.png"
-          alt="BOGA Logo"
-          className="w-full h-full object-contain"
-        />
-      </div>
-      <p className="text-zinc-500 font-black uppercase text-[10px] tracking-[0.5em] mb-12">
-        Strength Tracker
-      </p>
-      <button onClick={login} className="bg-white text-black px-12 py-5 rounded-[2rem] font-black uppercase tracking-tighter shadow-2xl active:scale-95 transition-all">
-        Google Login
-      </button>
-    </div>
   );
 }

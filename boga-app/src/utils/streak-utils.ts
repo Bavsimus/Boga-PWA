@@ -1,35 +1,44 @@
 import { WorkoutCompletion, StreakData } from '../types/workout';
 
+const toDate = (value: any): Date => value?.toDate?.() || new Date(value);
+
+/**
+ * Local calendar day key (YYYY-MM-DD) so multiple workouts on one day count once
+ */
+const dayKey = (date: Date): string =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+const addDays = (date: Date, amount: number): Date => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + amount);
+    return d;
+};
+
+const startOfToday = (): Date => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+};
+
 /**
  * Calculate the current workout streak from completion history
- * A streak continues if workouts are completed on consecutive calendar days
+ * A streak continues if workouts are completed on consecutive calendar days.
+ * Today without a workout yet doesn't break the streak (it's still alive until midnight).
  */
 export function calculateCurrentStreak(completions: WorkoutCompletion[]): number {
     if (!completions || completions.length === 0) return 0;
 
-    // Sort by date descending (most recent first)
-    const sorted = [...completions].sort((a, b) => {
-        const dateA = a.completedAt?.toDate?.() || new Date(a.completedAt);
-        const dateB = b.completedAt?.toDate?.() || new Date(b.completedAt);
-        return dateB.getTime() - dateA.getTime();
-    });
+    const days = new Set(completions.map(c => dayKey(toDate(c.completedAt))));
+
+    let cursor = startOfToday();
+    if (!days.has(dayKey(cursor))) {
+        cursor = addDays(cursor, -1);
+    }
 
     let streak = 0;
-    let currentDate = new Date();
-    currentDate.setHours(0, 0, 0, 0);
-
-    for (const completion of sorted) {
-        const completionDate = completion.completedAt?.toDate?.() || new Date(completion.completedAt);
-        completionDate.setHours(0, 0, 0, 0);
-
-        const daysDiff = Math.floor((currentDate.getTime() - completionDate.getTime()) / (1000 * 60 * 60 * 24));
-
-        if (daysDiff === streak) {
-            streak++;
-            currentDate = new Date(completionDate);
-        } else if (daysDiff > streak) {
-            break;
-        }
+    while (days.has(dayKey(cursor))) {
+        streak++;
+        cursor = addDays(cursor, -1);
     }
 
     return streak;
@@ -41,53 +50,38 @@ export function calculateCurrentStreak(completions: WorkoutCompletion[]): number
 export function calculateLongestStreak(completions: WorkoutCompletion[]): number {
     if (!completions || completions.length === 0) return 0;
 
-    const sorted = [...completions].sort((a, b) => {
-        const dateA = a.completedAt?.toDate?.() || new Date(a.completedAt);
-        const dateB = b.completedAt?.toDate?.() || new Date(b.completedAt);
-        return dateA.getTime() - dateB.getTime();
-    });
+    const days = new Set(completions.map(c => dayKey(toDate(c.completedAt))));
 
     let maxStreak = 0;
-    let currentStreak = 1;
-    let prevDate = sorted[0].completedAt?.toDate?.() || new Date(sorted[0].completedAt);
-    prevDate.setHours(0, 0, 0, 0);
+    for (const key of days) {
+        const [y, m, d] = key.split('-').map(Number);
+        const date = new Date(y, m - 1, d);
+        // Only start counting from the first day of a run
+        if (days.has(dayKey(addDays(date, -1)))) continue;
 
-    for (let i = 1; i < sorted.length; i++) {
-        const currentDate = sorted[i].completedAt?.toDate?.() || new Date(sorted[i].completedAt);
-        currentDate.setHours(0, 0, 0, 0);
-
-        const daysDiff = Math.floor((currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
-
-        if (daysDiff === 1) {
-            currentStreak++;
-            maxStreak = Math.max(maxStreak, currentStreak);
-        } else if (daysDiff > 1) {
-            currentStreak = 1;
+        let length = 1;
+        let cursor = addDays(date, 1);
+        while (days.has(dayKey(cursor))) {
+            length++;
+            cursor = addDays(cursor, 1);
         }
-
-        prevDate = currentDate;
+        maxStreak = Math.max(maxStreak, length);
     }
 
-    return Math.max(maxStreak, currentStreak);
+    return maxStreak;
 }
 
 /**
- * Get workout count for the last N days
+ * Get workout count for the last N days (oldest first, today last)
  */
 export function getWeeklyStats(completions: WorkoutCompletion[], days: number = 7): number[] {
+    const today = startOfToday();
+    const keys = Array.from({ length: days }, (_, i) => dayKey(addDays(today, i - (days - 1))));
     const stats = new Array(days).fill(0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
     completions.forEach(completion => {
-        const completionDate = completion.completedAt?.toDate?.() || new Date(completion.completedAt);
-        completionDate.setHours(0, 0, 0, 0);
-
-        const daysDiff = Math.floor((today.getTime() - completionDate.getTime()) / (1000 * 60 * 60 * 24));
-
-        if (daysDiff >= 0 && daysDiff < days) {
-            stats[days - 1 - daysDiff]++;
-        }
+        const index = keys.indexOf(dayKey(toDate(completion.completedAt)));
+        if (index !== -1) stats[index]++;
     });
 
     return stats;
