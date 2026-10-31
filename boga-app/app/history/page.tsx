@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { auth } from "@/lib/firebase";
 import { getWorkoutHistory } from "@/src/services/database";
-import { BottomNav, EmptyState, Icon, LoadingScreen, LoginScreen, PageHeader } from "@/src/components/ui";
+import { BottomNav, EmptyState, ErrorScreen, Icon, LoadingScreen, LoginScreen, PageHeader } from "@/src/components/ui";
 import { User } from "firebase/auth";
 import { QueryDocumentSnapshot } from "firebase/firestore";
 
@@ -12,6 +12,7 @@ export default function HistoryPage() {
   const [user, setUser] = useState<User | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [cursor, setCursor] = useState<QueryDocumentSnapshot | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -19,13 +20,19 @@ export default function HistoryPage() {
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (u) => {
       setUser(u);
-      if (u) {
-        const page = await getWorkoutHistory(u.uid);
-        setLogs(page.logs);
-        setCursor(page.cursor);
-        setHasMore(page.hasMore);
+      try {
+        if (u) {
+          const page = await getWorkoutHistory(u.uid);
+          setLogs(page.logs);
+          setCursor(page.cursor);
+          setHasMore(page.hasMore);
+        }
+      } catch (error) {
+        console.error("Error loading history:", error);
+        setLoadError(true);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return () => unsub();
   }, []);
@@ -38,6 +45,8 @@ export default function HistoryPage() {
       setLogs(prev => [...prev, ...page.logs]);
       setCursor(page.cursor);
       setHasMore(page.hasMore);
+    } catch (error) {
+      console.error("Error loading more history:", error);
     } finally {
       setLoadingMore(false);
     }
@@ -45,6 +54,7 @@ export default function HistoryPage() {
 
   if (loading) return <LoadingScreen />;
   if (!user) return <LoginScreen />;
+  if (loadError) return <ErrorScreen />;
 
   // Group sessions by month for a cleaner timeline
   const groups: { month: string; items: any[] }[] = [];

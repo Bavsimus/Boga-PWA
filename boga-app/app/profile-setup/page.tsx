@@ -21,7 +21,7 @@ export default function ProfileSetupPage() {
             setUser(u);
             if (u) {
                 // Check if user already has a profile
-                const profile = await getUserProfile(u.uid);
+                const profile = await getUserProfile(u.uid).catch(() => null);
                 if (profile && profile.username) {
                     // Already has profile, redirect to dashboard
                     router.push("/");
