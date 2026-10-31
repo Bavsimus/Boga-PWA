@@ -1,25 +1,36 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist } from "next/font/google";
 import "./globals.css";
+import ServiceWorker from "@/src/components/ServiceWorker";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata = {
+export const metadata: Metadata = {
   title: 'BOGA Training',
   description: 'Forge Your Strength',
+  applicationName: 'BOGA',
   icons: {
     icon: '/boga.png',
     apple: '/boga.png',
   },
-  manifest: '/manifest.json', // PWA için (Opsiyonel ama önerilir)
+  manifest: '/manifest.json',
+  // iOS ana ekrana eklendiğinde tam ekran açılsın
+  appleWebApp: {
+    capable: true,
+    title: 'BOGA',
+    statusBarStyle: 'black-translucent',
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#000000',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({
@@ -30,9 +41,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} antialiased bg-black`}
       >
         {children}
+        <ServiceWorker />
       </body>
     </html>
   );

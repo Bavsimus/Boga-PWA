@@ -12,6 +12,8 @@ import { calculateStreakData, getWeeklyStats } from "@/src/utils/streak-utils";
 import { WorkoutCompletion, StreakData, UserProfile } from "@/src/types/workout";
 import StreakCounter from "@/src/components/StreakCounter";
 import ActivityChart from "@/src/components/ActivityChart";
+import { Avatar, BottomNav, Icon, LoadingScreen, PageHeader } from "@/src/components/ui";
+import Link from "next/link";
 
 export default function PublicProfilePage() {
     const { username } = useParams();
@@ -24,17 +26,20 @@ export default function PublicProfilePage() {
     const [programs, setPrograms] = useState<any[]>([]);
     const [isOwnProfile, setIsOwnProfile] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [authReady, setAuthReady] = useState(false);
 
     useEffect(() => {
         const unsubscribe = auth.onAuthStateChanged((u) => {
             setCurrentUser(u);
+            setAuthReady(true);
         });
         return () => unsubscribe();
     }, []);
 
     useEffect(() => {
         const loadProfile = async () => {
-            if (!username || typeof username !== "string") return;
+            // Wait for auth so the profile is fetched once, not again after sign-in resolves
+            if (!authReady || !username || typeof username !== "string") return;
 
             try {
                 const profileData = await getUserByUsername(username);
@@ -53,19 +58,16 @@ export default function PublicProfilePage() {
                     return;
                 }
 
-                // Load stats
-                const completions = await getWorkoutCompletions(profileData.userId, 30);
-                const streak = calculateStreakData(completions as WorkoutCompletion[]);
-                const weekly = getWeeklyStats(completions as WorkoutCompletion[], 7);
+                // Load stats and programs (if visible) in parallel
+                const canSeePrograms = profileData.showPrograms || currentUser?.uid === profileData.userId;
+                const [completions, progs] = await Promise.all([
+                    getWorkoutCompletions(profileData.userId, 30),
+                    canSeePrograms ? getUserPrograms(profileData.userId) : Promise.resolve([])
+                ]);
 
-                setStreakData(streak);
-                setWeeklyData(weekly);
-
-                // Load programs if public
-                if (profileData.showPrograms || currentUser?.uid === profileData.userId) {
-                    const progs = await getUserPrograms(profileData.userId);
-                    setPrograms(progs);
-                }
+                setStreakData(calculateStreakData(completions as WorkoutCompletion[]));
+                setWeeklyData(getWeeklyStats(completions as WorkoutCompletion[], 7));
+                setPrograms(progs);
             } catch (error) {
                 console.error("Error loading profile:", error);
             } finally {
@@ -74,145 +76,96 @@ export default function PublicProfilePage() {
         };
 
         loadProfile();
-    }, [username, currentUser]);
+    }, [username, currentUser, authReady]);
 
-    const handleShare = () => {
+    const handleShare = async () => {
         const url = window.location.href;
-        navigator.clipboard.writeText(url);
+        // Use the native share sheet on phones, fall back to copying the link
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: `${profile?.displayName} on BOGA`, url });
+                return;
+            } catch { }
+        }
+        await navigator.clipboard.writeText(url);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
 
-    if (loading) {
-        return (
-            <div className="bg-black min-h-screen flex items-center justify-center text-white">
-                <p className="italic tracking-widest font-black uppercase">Loading...</p>
-            </div>
-        );
-    }
+    if (loading) return <LoadingScreen />;
 
-    if (!profile) {
+    if (!profile || (!profile.isPublic && !isOwnProfile)) {
+        const isPrivate = !!profile;
         return (
-            <div className="bg-black min-h-screen flex flex-col items-center justify-center text-white p-6">
-                <h1 className="text-6xl font-black italic text-red-600 mb-4">404</h1>
-                <p className="text-zinc-500 text-lg font-bold mb-8">Profile not found</p>
-                <button
-                    onClick={() => router.push("/")}
-                    className="bg-zinc-900 text-white px-6 py-3 rounded-full font-black uppercase text-xs border border-zinc-800"
-                >
-                    Go Home
-                </button>
-            </div>
-        );
-    }
-
-    if (!profile.isPublic && !isOwnProfile) {
-        return (
-            <div className="bg-black min-h-screen flex flex-col items-center justify-center text-white p-6">
-                <div className="text-6xl mb-6">🔒</div>
-                <h1 className="text-3xl font-black italic text-red-600 mb-2">Private Profile</h1>
-                <p className="text-zinc-500 text-sm font-bold mb-8">This profile is private</p>
-                <button
-                    onClick={() => router.push("/")}
-                    className="bg-zinc-900 text-white px-6 py-3 rounded-full font-black uppercase text-xs border border-zinc-800"
-                >
-                    Go Home
-                </button>
-            </div>
+            <main className="min-h-screen text-white px-5 max-w-md mx-auto flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 rounded-3xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-zinc-400 mb-5">
+                    <Icon name={isPrivate ? "lock" : "user"} size={28} />
+                </div>
+                <h1 className="text-2xl font-bold tracking-tight">{isPrivate ? "This profile is private" : "Profile not found"}</h1>
+                <p className="text-zinc-500 mt-2">{isPrivate ? "Only the owner can see these stats." : `There's no athlete called @${username}.`}</p>
+                <button onClick={() => router.push("/")} className="btn btn-light h-12 px-6 mt-8">Go Home</button>
+            </main>
         );
     }
 
     return (
-        <main className="min-h-screen bg-black text-white p-6">
-            {/* Header */}
-            <header className="flex items-center justify-between mb-8">
-                <button
-                    onClick={() => router.back()}
-                    className="text-zinc-500 text-xs font-bold uppercase tracking-widest"
-                >
-                    ← Back
-                </button>
-                <button
-                    onClick={handleShare}
-                    className="bg-zinc-900 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase border border-zinc-800 active:scale-95 transition-all"
-                >
-                    {copied ? "✓ Copied!" : "Share Profile"}
-                </button>
-            </header>
+        <main className="min-h-screen text-white px-5 max-w-2xl mx-auto !pb-32">
+            <PageHeader
+                action={
+                    <button onClick={handleShare} className="btn btn-ghost h-10 px-4 text-sm">
+                        {copied ? <><Icon name="check" size={16} /> Copied</> : <><Icon name="share" size={16} /> Share</>}
+                    </button>
+                }
+            />
 
-            <div className="max-w-2xl mx-auto">
-                {/* Profile Header */}
-                <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 rounded-[2.5rem] p-8 mb-6">
-                    <div className="flex items-center gap-6 mb-6">
-                        {/* Avatar */}
-                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center text-4xl font-black">
-                            {profile.profilePicture ? (
-                                <img src={profile.profilePicture} alt={profile.displayName} className="w-full h-full rounded-full object-cover" />
-                            ) : (
-                                profile.displayName.charAt(0).toUpperCase()
-                            )}
-                        </div>
-
-                        {/* Info */}
-                        <div className="flex-1">
-                            <h1 className="text-3xl font-black italic text-white tracking-tighter mb-1">
-                                {profile.displayName}
-                            </h1>
-                            <p className="text-zinc-500 text-sm font-bold">
-                                @{profile.username}
-                            </p>
-                            {profile.bio && (
-                                <p className="text-zinc-400 text-sm mt-3">
-                                    {profile.bio}
-                                </p>
-                            )}
-                        </div>
+            {/* Profile Header */}
+            <section className="flex flex-col items-center text-center mb-8 animate-rise-in">
+                <div className="relative mb-4">
+                    <div className="absolute inset-0 bg-red-600/30 blur-2xl rounded-full" />
+                    <div className="relative">
+                        <Avatar src={profile.profilePicture} name={profile.displayName} size={96} />
                     </div>
-
-                    {isOwnProfile && (
-                        <button
-                            onClick={() => router.push("/settings")}
-                            className="w-full bg-zinc-800 text-white py-3 rounded-2xl font-black uppercase text-xs border border-zinc-700 active:scale-95 transition-all"
-                        >
-                            Edit Profile
-                        </button>
-                    )}
                 </div>
+                <h1 className="text-3xl font-bold tracking-tight">{profile.displayName}</h1>
+                <p className="text-zinc-500 mt-1">@{profile.username}</p>
+                {profile.bio && <p className="text-zinc-300 mt-4 max-w-sm leading-relaxed">{profile.bio}</p>}
 
-                {/* Stats */}
-                <section className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <StreakCounter streakData={streakData} />
-                    <ActivityChart weeklyData={weeklyData} />
-                </section>
-
-                {/* Programs */}
-                {(profile.showPrograms || isOwnProfile) && programs.length > 0 && (
-                    <section>
-                        <h2 className="text-zinc-500 text-xs uppercase tracking-[0.2em] font-black mb-4">
-                            Active Programs
-                        </h2>
-                        <div className="space-y-3">
-                            {programs.map((program) => (
-                                <div
-                                    key={program.id}
-                                    onClick={() => router.push(`/program/${program.id}?userId=${profile.userId}`)}
-                                    className="bg-zinc-900/40 border border-zinc-800 p-5 rounded-[2rem] cursor-pointer hover:border-red-600/50 transition-all active:scale-95"
-                                >
-                                    <h3 className="text-lg font-black italic text-white tracking-tight">
-                                        {program.name}
-                                    </h3>
-                                    {program.description && (
-                                        <p className="text-zinc-500 text-sm mt-1">{program.description}</p>
-                                    )}
-                                    <div className="flex items-center gap-2 mt-3">
-                                        <span className="text-red-600 text-xs font-bold">View Program →</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
+                {isOwnProfile && (
+                    <button onClick={() => router.push("/settings")} className="btn btn-ghost h-10 px-5 text-sm mt-5">
+                        <Icon name="edit" size={15} /> Edit Profile
+                    </button>
                 )}
-            </div>
+            </section>
+
+            {/* Stats */}
+            <section className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4 animate-rise-in" style={{ animationDelay: "60ms" }}>
+                <StreakCounter streakData={streakData} />
+                <ActivityChart weeklyData={weeklyData} />
+            </section>
+
+            {/* Programs */}
+            {(profile.showPrograms || isOwnProfile) && programs.length > 0 && (
+                <section className="animate-rise-in" style={{ animationDelay: "120ms" }}>
+                    <p className="eyebrow mb-4">Programs</p>
+                    <div className="grid gap-3">
+                        {programs.map((program) => (
+                            <Link
+                                key={program.id}
+                                href={`/program/${program.id}?userId=${profile.userId}`}
+                                className="card card-interactive flex items-center justify-between gap-4 p-5"
+                            >
+                                <div className="min-w-0">
+                                    <h3 className="font-semibold text-[17px] tracking-tight truncate">{program.name}</h3>
+                                    <p className="text-xs text-zinc-500 mt-0.5 truncate">{program.description || "View program"}</p>
+                                </div>
+                                <Icon name="chevron" size={18} className="text-zinc-600 shrink-0" />
+                            </Link>
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {currentUser && <BottomNav />}
         </main>
     );
 }

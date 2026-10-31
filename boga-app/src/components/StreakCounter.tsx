@@ -1,5 +1,6 @@
 "use client";
 import { StreakData } from '@/src/types/workout';
+import { Icon } from './ui';
 
 interface StreakCounterProps {
     streakData: StreakData;
@@ -7,72 +8,47 @@ interface StreakCounterProps {
 
 export default function StreakCounter({ streakData }: StreakCounterProps) {
     const { currentStreak, longestStreak, totalWorkouts } = streakData;
+    const active = currentStreak > 0;
+
+    const message = !active
+        ? 'Complete a workout to start your streak.'
+        : currentStreak >= 7
+            ? 'On fire. Keep the momentum going.'
+            : 'Show up again tomorrow to keep it alive.';
 
     return (
-        <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 rounded-[2.5rem] p-6 relative overflow-hidden">
+        <div className="card overflow-hidden p-6">
             {/* Glow effect */}
-            <div className="absolute inset-0 bg-red-600/5 blur-3xl" />
+            {active && <div className="absolute -top-16 -right-10 w-48 h-48 rounded-full bg-red-600/25 blur-3xl pointer-events-none" />}
 
-            <div className="relative z-10">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-black">Your Streak</h2>
-                    <div className="text-zinc-600 text-xs font-bold">
-                        {totalWorkouts} total
+            <div className="relative flex items-start justify-between">
+                <div>
+                    <p className="eyebrow">Current Streak</p>
+                    <div className="flex items-baseline gap-2 mt-2">
+                        <span className="text-6xl font-bold tracking-tighter tabular leading-none">{currentStreak}</span>
+                        <span className="text-zinc-400 font-medium">{currentStreak === 1 ? 'day' : 'days'}</span>
                     </div>
                 </div>
-
-                {/* Main Streak Display */}
-                <div className="flex items-center gap-6 mb-6">
-                    {/* Fire Icon with Animation */}
-                    <div className="relative">
-                        <div className={`text-6xl ${currentStreak > 0 ? 'animate-pulse' : 'opacity-30'}`}>
-                            🔥
-                        </div>
-                        {currentStreak > 0 && (
-                            <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center">
-                                <span className="text-white text-[10px] font-black">{currentStreak}</span>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Streak Info */}
-                    <div className="flex-1">
-                        <div className="text-5xl font-black italic text-white tracking-tighter leading-none mb-2">
-                            {currentStreak}
-                        </div>
-                        <div className="text-zinc-500 text-sm font-bold uppercase tracking-wider">
-                            {currentStreak === 1 ? 'Day Streak' : 'Days Streak'}
-                        </div>
-                    </div>
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${active ? 'bg-gradient-to-br from-orange-500 to-red-600 text-white shadow-lg shadow-red-600/40' : 'bg-white/5 text-zinc-600'}`}>
+                    <Icon name="flame" size={24} />
                 </div>
+            </div>
 
-                {/* Longest Streak Record */}
-                {longestStreak > 0 && (
-                    <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
-                        <span className="text-zinc-600 text-xs font-bold uppercase tracking-wider">
-                            Personal Best
-                        </span>
-                        <div className="flex items-center gap-2">
-                            <span className="text-2xl font-black italic text-red-600 tracking-tighter">
-                                {longestStreak}
-                            </span>
-                            <span className="text-zinc-500 text-xs font-bold">days</span>
-                        </div>
-                    </div>
-                )}
+            <p className="relative text-sm text-zinc-500 mt-3">{message}</p>
 
-                {/* Motivational Message */}
-                {currentStreak === 0 && (
-                    <div className="mt-4 text-center text-zinc-600 text-xs italic">
-                        Complete a workout to start your streak! 💪
+            <div className="relative grid grid-cols-2 gap-3 mt-5">
+                <div className="rounded-2xl bg-white/[0.03] border border-white/5 px-4 py-3">
+                    <div className="flex items-center gap-1.5 text-zinc-500 text-xs font-medium">
+                        <Icon name="trophy" size={13} /> Best
                     </div>
-                )}
-                {currentStreak >= 7 && (
-                    <div className="mt-4 text-center text-red-600 text-xs font-black uppercase tracking-wider">
-                        On Fire! Keep it up! 🚀
+                    <p className="text-xl font-bold tabular mt-0.5">{longestStreak} <span className="text-sm text-zinc-500 font-medium">days</span></p>
+                </div>
+                <div className="rounded-2xl bg-white/[0.03] border border-white/5 px-4 py-3">
+                    <div className="flex items-center gap-1.5 text-zinc-500 text-xs font-medium">
+                        <Icon name="dumbbell" size={13} /> Workouts
                     </div>
-                )}
+                    <p className="text-xl font-bold tabular mt-0.5">{totalWorkouts} <span className="text-sm text-zinc-500 font-medium">total</span></p>
+                </div>
             </div>
         </div>
     );

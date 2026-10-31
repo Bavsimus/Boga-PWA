@@ -9,11 +9,11 @@ import {
   deleteDay      // Yeni eklendi
 } from "@/src/services/database";
 import { User } from "firebase/auth";
-import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { EmptyState, Icon, LoadingScreen, LoginScreen, PageHeader, Sheet } from "@/src/components/ui";
 
 export default function ProgramDetails() {
-  const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
   const programId = params.id as string;
@@ -61,10 +61,10 @@ export default function ProgramDetails() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [programId, loadData]);
+  }, [programId, loadData, userIdParam]);
 
   const handleCreateDay = async () => {
-    if (!user || !newDayName || isCreating) return;
+    if (!user || !newDayName.trim() || isCreating) return;
     setIsCreating(true);
     try {
       await addTrainingDay(user.uid, programId, newDayName, days.length + 1);
@@ -90,7 +90,7 @@ export default function ProgramDetails() {
   };
 
   const handleDeleteDay = async (dayId: string) => {
-    if (!user || !window.confirm("Are you sure you want to delete this training day?")) return;
+    if (!user || !window.confirm("Delete this training day and its exercises?")) return;
     try {
       await deleteDay(user.uid, programId, dayId);
       setIsEditModalOpen(false);
@@ -100,125 +100,108 @@ export default function ProgramDetails() {
     }
   };
 
-  if (loading) return (
-    <div className="bg-black min-h-screen flex items-center justify-center text-white italic tracking-[0.3em] font-black">
-      LOADING...
-    </div>
-  );
+  if (loading) return <LoadingScreen />;
 
-  if (!user) return null;
+  if (!user) return <LoginScreen />;
 
   return (
-    <main className="min-h-screen bg-black text-white p-6 font-sans">
-      <header className="flex justify-between items-center mb-8">
-        <button onClick={() => router.back()} className="text-zinc-500 text-xs font-black uppercase tracking-widest">
-          ← Back
-        </button>
-        <h1 className="text-xl font-black italic tracking-tighter text-red-600 uppercase leading-none text-center flex-1 mx-4">
-          {program?.name || "Program"}
-        </h1>
-        <div className="w-8" />
-      </header>
+    <main className="min-h-screen text-white px-5 max-w-2xl mx-auto">
+      <PageHeader subtitle={isOwner ? "Program" : "Shared Program"} title={program?.name || "Program"} />
 
-      <section>
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-zinc-500 text-xs uppercase tracking-[0.2em] font-black">Training Days</h2>
+      <section className="animate-rise-in">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <p className="eyebrow">Training Days</p>
+            <p className="text-sm text-zinc-500 mt-1">{days.length} {days.length === 1 ? "day" : "days"} in rotation</p>
+          </div>
           {isOwner && (
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="bg-zinc-900 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase border border-zinc-800 active:scale-95 transition-all"
-            >
-              + Add Day
+            <button onClick={() => setIsModalOpen(true)} className="btn btn-ghost h-10 px-4 text-sm">
+              <Icon name="plus" size={16} /> Add Day
             </button>
           )}
         </div>
 
-        <div className="grid gap-4">
+        <div className="grid gap-3">
           {days.length === 0 ? (
-            <div className="border border-zinc-900 border-dashed p-12 rounded-[2.5rem] text-center text-zinc-700 italic text-sm">
-              No training days yet. Add one to start.
-            </div>
+            <EmptyState
+              icon="calendar"
+              title="No training days yet"
+              text={isOwner ? "Split your program into days like Push, Pull or Legs." : "This program doesn't have any days yet."}
+              action={isOwner && <button onClick={() => setIsModalOpen(true)} className="btn btn-primary h-11 px-5 text-sm"><Icon name="plus" size={16} /> Add First Day</button>}
+            />
           ) : (
-            days.map((day) => (
-              <div key={day.id} className="relative group">
-                <Link href={`/program/${programId}/day/${day.id}${userIdParam ? `?userId=${userIdParam}` : ''}`}>
-                  <div className="bg-zinc-900/40 border border-zinc-800 p-7 rounded-[2.5rem] flex justify-between items-center active:scale-[0.98] transition-all group-hover:border-zinc-700">
-                    <div>
-                      <h3 className="text-xl font-black italic uppercase tracking-tight group-hover:text-red-600 transition-colors">
-                        {day.name}
-                      </h3>
-                      <p className="text-[10px] text-zinc-600 uppercase mt-1 tracking-widest font-bold">Tap to see exercises</p>
-                    </div>
-                    <div className="text-red-600 font-black text-2xl pr-8">→</div>
+            days.map((day, i) => (
+              <div key={day.id} className="relative">
+                <Link
+                  href={`/program/${programId}/day/${day.id}${userIdParam ? `?userId=${userIdParam}` : ''}`}
+                  className={`card card-interactive flex items-center gap-4 p-4 ${isOwner ? "pr-24" : "pr-12"}`}
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.07] flex flex-col items-center justify-center shrink-0">
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500 leading-none">Day</span>
+                    <span className="text-lg font-bold tabular leading-tight">{i + 1}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-[17px] tracking-tight truncate">{day.name || day.title}</h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">{isOwner ? "Tap to train" : "View exercises"}</p>
                   </div>
                 </Link>
 
-                {/* Edit Icon Button - Only for owner */}
-                {isOwner && (
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setEditingDay({ id: day.id, name: day.name });
-                      setIsEditModalOpen(true);
-                    }}
-                    className="absolute right-6 top-1/2 -translate-y-1/2 p-3 text-zinc-700 hover:text-white transition-colors"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>
-                  </button>
-                )}
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  {/* Edit Icon Button - Only for owner */}
+                  {isOwner && (
+                    <button
+                      onClick={() => {
+                        setEditingDay({ id: day.id, name: day.name || day.title });
+                        setIsEditModalOpen(true);
+                      }}
+                      className="icon-btn !bg-transparent !border-transparent"
+                      aria-label="Edit day"
+                    >
+                      <Icon name="more" size={18} />
+                    </button>
+                  )}
+                  <Icon name="chevron" size={18} className="text-zinc-600 pointer-events-none" />
+                </div>
               </div>
             ))
           )}
         </div>
       </section>
 
-      {/* New Day Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsModalOpen(false)} />
-          <div className="relative bg-zinc-900 w-full max-w-sm rounded-[2.5rem] p-8 border border-zinc-800 shadow-2xl">
-            <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-6 text-red-600">New Day</h3>
-            <input
-              autoFocus
-              className="w-full bg-black border border-zinc-800 p-5 rounded-2xl mb-6 outline-none focus:border-red-600 transition-all font-bold text-white placeholder:text-zinc-700"
-              placeholder="e.g. PUSH DAY A"
-              value={newDayName}
-              onChange={(e) => setNewDayName(e.target.value)}
-            />
-            <div className="flex gap-4">
-              <button onClick={() => setIsModalOpen(false)} className="flex-1 text-zinc-600 font-black uppercase text-[10px] tracking-widest">Cancel</button>
-              <button
-                onClick={handleCreateDay}
-                disabled={isCreating}
-                className="flex-[2] bg-white text-black py-4 rounded-2xl font-black uppercase text-xs active:scale-95 transition-all disabled:opacity-50"
-              >
-                {isCreating ? 'Creating...' : 'Create Day'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* New Day Sheet */}
+      <Sheet open={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Training Day">
+        <form onSubmit={(e) => { e.preventDefault(); handleCreateDay(); }}>
+          <input
+            autoFocus
+            className="input mb-4"
+            placeholder="e.g. Push Day A"
+            value={newDayName}
+            onChange={(e) => setNewDayName(e.target.value)}
+          />
+          <button type="submit" disabled={isCreating || !newDayName.trim()} className="btn btn-primary w-full h-12">
+            {isCreating ? 'Creating...' : 'Create Day'}
+          </button>
+        </form>
+      </Sheet>
 
-      {/* Edit Day Modal */}
-      {isEditModalOpen && editingDay && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6">
-          <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={() => setIsEditModalOpen(false)} />
-          <div className="relative bg-zinc-900 w-full max-w-sm rounded-[2.5rem] p-8 border border-zinc-800 shadow-2xl">
-            <h3 className="text-xl font-black italic uppercase text-white mb-6">Edit Training Day</h3>
+      {/* Edit Day Sheet */}
+      <Sheet open={isEditModalOpen && !!editingDay} onClose={() => setIsEditModalOpen(false)} title="Edit Training Day">
+        {editingDay && (
+          <form onSubmit={(e) => { e.preventDefault(); handleUpdateDay(); }}>
             <input
-              className="w-full bg-black border border-zinc-800 p-5 rounded-2xl mb-6 outline-none focus:border-red-600 text-white font-bold"
+              className="input mb-4"
               value={editingDay.name}
               onChange={(e) => setEditingDay({ ...editingDay, name: e.target.value })}
             />
-            <div className="flex flex-col gap-3">
-              <button onClick={handleUpdateDay} className="w-full bg-white text-black py-4 rounded-2xl font-black uppercase text-xs active:scale-95 transition-all">Save Changes</button>
-              <button onClick={() => handleDeleteDay(editingDay.id)} className="w-full py-4 text-red-600 font-black uppercase text-[10px] tracking-widest border border-red-900/30 rounded-2xl">Delete Day</button>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-zinc-600 font-bold uppercase text-[10px] mt-2">Cancel</button>
+            <div className="grid gap-2">
+              <button type="submit" disabled={!editingDay.name?.trim()} className="btn btn-light h-12">Save Changes</button>
+              <button type="button" onClick={() => handleDeleteDay(editingDay.id)} className="btn btn-danger h-12">
+                <Icon name="trash" size={16} /> Delete Day
+              </button>
             </div>
-          </div>
-        </div>
-      )}
+          </form>
+        )}
+      </Sheet>
     </main>
   );
 }
