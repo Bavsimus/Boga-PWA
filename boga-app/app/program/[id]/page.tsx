@@ -11,7 +11,7 @@ import {
 import { User } from "firebase/auth";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { EmptyState, Icon, LoadingScreen, LoginScreen, PageHeader, Sheet } from "@/src/components/ui";
+import { EmptyState, ErrorScreen, Icon, LoadingScreen, LoginScreen, PageHeader, Sheet } from "@/src/components/ui";
 
 export default function ProgramDetails() {
   const params = useParams();
@@ -23,6 +23,7 @@ export default function ProgramDetails() {
   const [program, setProgram] = useState<any>(null);
   const [days, setDays] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newDayName, setNewDayName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -42,6 +43,7 @@ export default function ProgramDetails() {
       setDays(daysData);
     } catch (error) {
       console.error("Error loading program data:", error);
+      throw error;
     }
   }, []);
 
@@ -55,7 +57,11 @@ export default function ProgramDetails() {
         if (targetUserId) {
           // Check if it's the user's own program
           setIsOwner(u?.uid === targetUserId);
-          await loadData(targetUserId, programId);
+          try {
+            await loadData(targetUserId, programId);
+          } catch {
+            setLoadError(true);
+          }
         }
       }
       setLoading(false);
@@ -103,6 +109,7 @@ export default function ProgramDetails() {
   if (loading) return <LoadingScreen />;
 
   if (!user) return <LoginScreen />;
+  if (loadError) return <ErrorScreen />;
 
   return (
     <main className="min-h-screen text-white px-5 max-w-2xl mx-auto">

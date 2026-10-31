@@ -12,7 +12,7 @@ import { calculateStreakData, getWeeklyStats } from "@/src/utils/streak-utils";
 import { WorkoutCompletion, StreakData, UserProfile } from "@/src/types/workout";
 import StreakCounter from "@/src/components/StreakCounter";
 import ActivityChart from "@/src/components/ActivityChart";
-import { Avatar, BottomNav, Icon, LoadingScreen, PageHeader } from "@/src/components/ui";
+import { Avatar, BottomNav, ErrorScreen, Icon, LoadingScreen, PageHeader } from "@/src/components/ui";
 import Link from "next/link";
 
 export default function PublicProfilePage() {
@@ -27,6 +27,7 @@ export default function PublicProfilePage() {
     const [isOwnProfile, setIsOwnProfile] = useState(false);
     const [copied, setCopied] = useState(false);
     const [authReady, setAuthReady] = useState(false);
+    const [loadError, setLoadError] = useState(false);
 
     useEffect(() => {
         const unsubscribe = auth.onAuthStateChanged((u) => {
@@ -70,6 +71,7 @@ export default function PublicProfilePage() {
                 setPrograms(progs);
             } catch (error) {
                 console.error("Error loading profile:", error);
+                setLoadError(true);
             } finally {
                 setLoading(false);
             }
@@ -93,6 +95,7 @@ export default function PublicProfilePage() {
     };
 
     if (loading) return <LoadingScreen />;
+    if (loadError) return <ErrorScreen />;
 
     if (!profile || (!profile.isPublic && !isOwnProfile)) {
         const isPrivate = !!profile;

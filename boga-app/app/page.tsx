@@ -16,7 +16,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import StreakCounter from "@/src/components/StreakCounter";
 import ActivityChart from "@/src/components/ActivityChart";
-import { Avatar, BottomNav, EmptyState, Icon, LoadingScreen, LoginScreen, Logo, Sheet } from "@/src/components/ui";
+import { Avatar, BottomNav, EmptyState, ErrorScreen, Icon, LoadingScreen, LoginScreen, Logo, Sheet } from "@/src/components/ui";
 import { calculateStreakData, getWeeklyStats } from "@/src/utils/streak-utils";
 import { WorkoutCompletion, StreakData } from "@/src/types/workout";
 
@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   // Edit Mode States
   const [editingProgram, setEditingProgram] = useState<{ id: string, name: string } | null>(null);
@@ -63,6 +64,7 @@ export default function Dashboard() {
       setWeeklyData(weekly);
     } catch (error) {
       console.error("Initial data load error:", error);
+      throw error;
     }
   }, []);
 
@@ -90,7 +92,14 @@ export default function Dashboard() {
           }
         };
 
-        await Promise.all([ensureProfile(), loadInitialData(u.uid)]);
+        // The profile only feeds the nav link, so it never blocks the dashboard (first-login writes can be slow)
+        ensureProfile();
+        try {
+          await loadInitialData(u.uid);
+        } catch {
+          // Show an error instead of an empty dashboard that looks like lost data
+          setLoadError(true);
+        }
       }
       setLoading(false);
     });
@@ -137,6 +146,7 @@ export default function Dashboard() {
   if (loading) return <LoadingScreen variant="dashboard" />;
 
   if (!user) return <LoginScreen />;
+  if (loadError) return <ErrorScreen />;
 
   const hour = new Date().getHours();
   const greeting = hour < 5 ? "Late night grind" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";

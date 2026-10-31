@@ -1,11 +1,41 @@
 import { db } from "@/lib/firebase";
 import {
   collection, addDoc, serverTimestamp, getDocs, getDoc, setDoc, query, orderBy, limit as limitTo,
-  startAfter, where, Timestamp, getCountFromServer, doc, updateDoc, deleteDoc, QueryDocumentSnapshot
+  startAfter, where, Timestamp, getCountFromServer, doc, updateDoc, deleteDoc, QueryDocumentSnapshot,
+  getDocsFromServer, getDocsFromCache, getDocFromServer, getDocFromCache, Query, DocumentReference
 } from "firebase/firestore";
-import { Program } from "../types/workout";
 
+// --- RESILIENT READS ---
+// On flaky mobile connections (e.g. iOS resuming the PWA from background) a plain read can hang
+// for ~10s or throw "client is offline". Ask the server first, but if it's slow or unreachable
+// fall back to the local cache so screens never get stuck loading.
+const SERVER_TIMEOUT_MS = 4000;
 
+const timeout = (ms: number) => new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms));
+
+const readDocs = async (q: Query) => {
+  const server = getDocsFromServer(q);
+  server.catch(() => { }); // handled below; avoid unhandled rejection if we return the cache
+  try {
+    return await Promise.race([server, timeout(SERVER_TIMEOUT_MS)]);
+  } catch {
+    const cached = await getDocsFromCache(q).catch(() => null);
+    if (cached && !cached.empty) return cached;
+    return await server; // nothing cached: wait for the server or surface its error
+  }
+};
+
+const readDoc = async (ref: DocumentReference) => {
+  const server = getDocFromServer(ref);
+  server.catch(() => { });
+  try {
+    return await Promise.race([server, timeout(SERVER_TIMEOUT_MS)]);
+  } catch {
+    const cached = await getDocFromCache(ref).catch(() => null);
+    if (cached) return cached;
+    return await server;
+  }
+};
 
 export const createProgram = async (userId: string, programName: string) => {
   const programsRef = collection(db, "users", userId, "programs");
@@ -20,13 +50,13 @@ export const createProgram = async (userId: string, programName: string) => {
 export const getUserPrograms = async (userId: string) => {
   const programsRef = collection(db, "users", userId, "programs");
   const q = query(programsRef, orderBy("createdAt", "desc"));
-  const querySnapshot = await getDocs(q);
+  const querySnapshot = await readDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
 export const getProgram = async (userId: string, programId: string) => {
   const programRef = doc(db, "users", userId, "programs", programId);
-  const programSnap = await getDoc(programRef);
+  const programSnap = await readDoc(programRef);
   if (programSnap.exists()) {
     return { id: programSnap.id, ...programSnap.data() };
   } else {
@@ -46,13 +76,13 @@ export const addTrainingDay = async (userId: string, programId: string, dayTitle
 export const getProgramDays = async (userId: string, programId: string) => {
   const daysRef = collection(db, "users", userId, "programs", programId, "days");
   const q = query(daysRef, orderBy("order", "asc"));
-  const querySnapshot = await getDocs(q);
+  const querySnapshot = await readDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
 export const getDay = async (userId: string, programId: string, dayId: string): Promise<any | null> => {
   const dayRef = doc(db, "users", userId, "programs", programId, "days", dayId);
-  const daySnap = await getDoc(dayRef);
+  const daySnap = await readDoc(dayRef);
   if (daySnap.exists()) {
     return { id: daySnap.id, ...daySnap.data() };
   } else {
@@ -71,7 +101,7 @@ export const addExercise = async (userId: string, programId: string, dayId: stri
 export const getExercises = async (userId: string, programId: string, dayId: string) => {
   const exercisesRef = collection(db, "users", userId, "programs", programId, "days", dayId, "exercises");
   const q = query(exercisesRef, orderBy("createdAt", "asc"));
-  const querySnapshot = await getDocs(q);
+  const querySnapshot = await readDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
@@ -85,8 +115,14 @@ export const finishWorkout = async (userId: string, workoutSummary: any) => {
 
 export const getTotalWorkoutsCount = async (userId: string) => {
   const logsRef = collection(db, "users", userId, "logs");
-  const snapshot = await getCountFromServer(logsRef);
-  return snapshot.data().count;
+  try {
+    const snapshot = await Promise.race([getCountFromServer(logsRef), timeout(SERVER_TIMEOUT_MS)]);
+    return snapshot.data().count;
+  } catch {
+    // Aggregations need the server; offline, count what's cached
+    const cached = await getDocsFromCache(logsRef).catch(() => null);
+    return cached?.size ?? 0;
+  }
 };
 
 export const updateProgramName = async (userId: string, programId: string, newName: string) => {
@@ -133,7 +169,7 @@ export const getWorkoutHistory = async (userId: string, pageSize: number = 20, c
   const q = cursor
     ? query(logsRef, orderBy("completedAt", "desc"), startAfter(cursor), limitTo(pageSize))
     : query(logsRef, orderBy("completedAt", "desc"), limitTo(pageSize)); // En yeni en üstte
-  const querySnapshot = await getDocs(q);
+  const querySnapshot = await readDocs(q);
 
   return {
     logs: querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[],
@@ -146,7 +182,7 @@ export const getWorkoutHistory = async (userId: string, pageSize: number = 20, c
 export const getUserSettings = async (userId: string) => {
 
   const settingsRef = doc(db, "users", userId, "settings", "preferences");
-  const settingsSnap = await getDoc(settingsRef);
+  const settingsSnap = await readDoc(settingsRef);
 
   if (settingsSnap.exists()) {
     return settingsSnap.data();
@@ -156,8 +192,8 @@ export const getUserSettings = async (userId: string) => {
       restTimerEnabled: true,
       restDuration: 90
     };
-    // Create default settings in database
-    await setDoc(settingsRef, defaultSettings);
+    // Create default settings in database (don't block the screen on the write)
+    setDoc(settingsRef, defaultSettings).catch(error => console.error("Default settings write failed:", error));
     return defaultSettings;
   }
 };
@@ -187,7 +223,7 @@ export const recordWorkoutCompletion = async (
 export const getWorkoutCompletions = async (userId: string, limit: number = 30) => {
   const completionsRef = collection(db, "users", userId, "completions");
   const q = query(completionsRef, orderBy("completedAt", "desc"));
-  const querySnapshot = await getDocs(q);
+  const querySnapshot = await readDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
@@ -203,7 +239,7 @@ export const getCompletionsInRange = async (
     where("completedAt", "<=", Timestamp.fromDate(endDate)),
     orderBy("completedAt", "desc")
   );
-  const querySnapshot = await getDocs(q);
+  const querySnapshot = await readDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
@@ -283,7 +319,7 @@ export const checkUsernameAvailability = async (username: string): Promise<boole
 
 export const getUserProfile = async (userId: string): Promise<any | null> => {
   const profileRef = doc(db, "users", userId);
-  const profileSnap = await getDoc(profileRef);
+  const profileSnap = await readDoc(profileRef);
   if (profileSnap.exists()) {
     return { userId, ...profileSnap.data() };
   }
@@ -295,7 +331,7 @@ export const getUserByUsername = async (username: string) => {
 
   // Get userId from username
   const usernameRef = doc(db, "usernames", usernameLower);
-  const usernameSnap = await getDoc(usernameRef);
+  const usernameSnap = await readDoc(usernameRef);
 
   if (!usernameSnap.exists()) {
     return null;

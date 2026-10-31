@@ -13,7 +13,7 @@ import {
   getDay
 } from "@/src/services/database";
 import { User } from "firebase/auth";
-import { EmptyState, Icon, LoadingScreen, LoginScreen, PageHeader, Sheet } from "@/src/components/ui";
+import { EmptyState, ErrorScreen, Icon, LoadingScreen, LoginScreen, PageHeader, Sheet } from "@/src/components/ui";
 // confetti import removed from top level to be imported dynamically
 
 const formatClock = (totalSeconds: number) => {
@@ -34,6 +34,7 @@ export default function ExercisePage() {
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
   const [completedSets, setCompletedSets] = useState<{ [key: string]: boolean }>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [dayName, setDayName] = useState("");
   const [isOwner, setIsOwner] = useState(false);
 
@@ -111,6 +112,11 @@ export default function ExercisePage() {
       const saved = localStorage.getItem(progressKey);
       if (saved) {
         const parsed = JSON.parse(saved);
+        // An abandoned session from hours ago shouldn't resume as "live"
+        if (parsed.startedAt && Date.now() - parsed.startedAt > 6 * 60 * 60 * 1000) {
+          localStorage.removeItem(progressKey);
+          return;
+        }
         setCompletedSets(parsed.completedSets || {});
         setStartedAt(parsed.startedAt || Date.now());
         setIsWorkoutActive(true);
@@ -163,26 +169,33 @@ export default function ExercisePage() {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (u) => {
       setUser(u);
-      if (id && dayId) {
-        // Use userId from URL if provided, otherwise use current user's ID
-        const targetUserId = userIdParam || u?.uid;
+      try {
+        if (id && dayId) {
+          // Use userId from URL if provided, otherwise use current user's ID
+          const targetUserId = userIdParam || u?.uid;
 
-        if (targetUserId) {
-          // Check if viewing own workout
-          setIsOwner(u?.uid === targetUserId);
+          if (targetUserId) {
+            // Check if viewing own workout
+            setIsOwner(u?.uid === targetUserId);
 
-          // Load settings only for own workouts (in parallel with the exercises)
-          const [, settings] = await Promise.all([
-            loadExercises(targetUserId, id as string, dayId as string),
-            u?.uid === targetUserId ? getUserSettings(targetUserId) : Promise.resolve(null)
-          ]);
-          if (settings) {
-            setRestTimerEnabled(settings.restTimerEnabled);
-            setRestDuration(settings.restDuration);
+            // Load settings only for own workouts (in parallel with the exercises).
+            // Settings are optional: fall back to defaults rather than failing the page
+            const [, settings] = await Promise.all([
+              loadExercises(targetUserId, id as string, dayId as string),
+              u?.uid === targetUserId ? getUserSettings(targetUserId).catch(() => null) : Promise.resolve(null)
+            ]);
+            if (settings) {
+              setRestTimerEnabled(settings.restTimerEnabled);
+              setRestDuration(settings.restDuration);
+            }
           }
         }
+      } catch (error) {
+        console.error("Error loading workout:", error);
+        setLoadError(true);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return () => unsubscribe();
   }, [id, dayId, loadExercises, userIdParam]);
@@ -299,6 +312,7 @@ export default function ExercisePage() {
 
   if (loading) return <LoadingScreen />;
   if (!user) return <LoginScreen />;
+  if (loadError) return <ErrorScreen />;
 
   const totalSets = exercises.reduce((sum, ex) => sum + (Number(ex.sets) || 0), 0);
   const doneSets = exercises.reduce((sum, ex) => sum + doneCountFor(ex), 0);

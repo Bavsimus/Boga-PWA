@@ -4,7 +4,7 @@ import { auth } from "@/lib/firebase";
 import { User, signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { getUserSettings, updateUserSettings, getUserProfile, updateUserProfile } from "@/src/services/database";
-import { Avatar, BottomNav, Icon, LoadingScreen, LoginScreen, PageHeader, Toggle } from "@/src/components/ui";
+import { Avatar, BottomNav, ErrorScreen, Icon, LoadingScreen, LoginScreen, PageHeader, Toggle } from "@/src/components/ui";
 
 const PRESETS = [30, 60, 90, 120, 180];
 
@@ -12,6 +12,7 @@ export default function SettingsPage() {
     const router = useRouter();
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
 
@@ -29,23 +30,30 @@ export default function SettingsPage() {
     useEffect(() => {
         const unsubscribe = auth.onAuthStateChanged(async (u) => {
             setUser(u);
-            if (u) {
-                // Load user settings and profile
-                const [settings, profile] = await Promise.all([
-                    getUserSettings(u.uid),
-                    getUserProfile(u.uid)
-                ]);
-                setRestTimerEnabled(settings.restTimerEnabled);
-                setRestDuration(settings.restDuration);
-                if (profile) {
-                    setUsername(profile.username || "");
-                    setDisplayName(profile.displayName || u.displayName || "");
-                    setBio(profile.bio || "");
-                    setIsPublic(profile.isPublic ?? true);
-                    setShowPrograms(profile.showPrograms ?? true);
+            try {
+                if (u) {
+                    // Load user settings and profile
+                    const [settings, profile] = await Promise.all([
+                        getUserSettings(u.uid),
+                        getUserProfile(u.uid)
+                    ]);
+                    setRestTimerEnabled(settings.restTimerEnabled);
+                    setRestDuration(settings.restDuration);
+                    if (profile) {
+                        setUsername(profile.username || "");
+                        setDisplayName(profile.displayName || u.displayName || "");
+                        setBio(profile.bio || "");
+                        setIsPublic(profile.isPublic ?? true);
+                        setShowPrograms(profile.showPrograms ?? true);
+                    }
                 }
+            } catch (error) {
+                // Showing defaults here would let "Save" overwrite the real settings
+                console.error("Error loading settings:", error);
+                setLoadError(true);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         });
         return () => unsubscribe();
     }, []);
@@ -78,6 +86,7 @@ export default function SettingsPage() {
 
     if (loading) return <LoadingScreen />;
     if (!user) return <LoginScreen />;
+    if (loadError) return <ErrorScreen />;
 
     return (
         <main className="min-h-screen text-white px-5 max-w-2xl mx-auto !pb-48">

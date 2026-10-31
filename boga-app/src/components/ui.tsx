@@ -46,13 +46,20 @@ export function Logo({ size = 36, withText = true }: { size?: number; withText?:
   );
 }
 
+// --- NAVIGATION ---
+// router.back() does nothing when the page was opened directly (shared link, PWA restore), so fall back to home
+export function useGoBack() {
+  const router = useRouter();
+  return () => (window.history.length > 1 ? router.back() : router.push("/"));
+}
+
 // --- PAGE HEADER ---
 export function PageHeader({ title, subtitle, back = true, action }: { title?: string; subtitle?: string; back?: boolean; action?: ReactNode }) {
-  const router = useRouter();
+  const goBack = useGoBack();
   return (
     <header className="flex items-center gap-3 mb-6 min-h-10">
       {back && (
-        <button onClick={() => router.back()} className="icon-btn shrink-0" aria-label="Back">
+        <button onClick={goBack} className="icon-btn shrink-0" aria-label="Back">
           <Icon name="back" />
         </button>
       )}
@@ -181,13 +188,44 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 }
 
 // --- STATES ---
+const SLOW_LOAD_MS = 10000;
+
 export function LoadingScreen({ variant = "list" }: { variant?: "list" | "dashboard" }) {
+  const goBack = useGoBack();
+  const router = useRouter();
+  const [slow, setSlow] = useState(false);
+
+  // Never leave the user staring at a skeleton: after a while, offer a way out
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), SLOW_LOAD_MS);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <main className="min-h-screen px-5 max-w-2xl mx-auto" aria-busy="true">
       <div className="flex items-center justify-between mb-8">
-        <div className="skeleton h-10 w-32 !rounded-full" />
+        {variant === "dashboard" ? (
+          <div className="skeleton h-10 w-32 !rounded-full" />
+        ) : (
+          <div className="flex items-center gap-3">
+            <button onClick={goBack} className="icon-btn shrink-0" aria-label="Back">
+              <Icon name="back" />
+            </button>
+            <div className="skeleton h-6 w-36 !rounded-full" />
+          </div>
+        )}
         <div className="skeleton h-10 w-10 !rounded-full" />
       </div>
+      {slow && (
+        <div className="card p-5 mb-6 animate-rise-in" role="status">
+          <p className="font-semibold">This is taking longer than usual</p>
+          <p className="text-sm text-zinc-500 mt-1">Your connection may be slow. You can try again or head back.</p>
+          <div className="grid grid-cols-2 gap-2 mt-4">
+            <button onClick={() => window.location.reload()} className="btn btn-light h-11 text-sm">Try Again</button>
+            <button onClick={() => router.push("/")} className="btn btn-ghost h-11 text-sm">Go Home</button>
+          </div>
+        </div>
+      )}
       {variant === "dashboard" && (
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="skeleton h-24" />
@@ -200,6 +238,23 @@ export function LoadingScreen({ variant = "list" }: { variant?: "list" | "dashbo
         <div className="skeleton h-20" />
         <div className="skeleton h-20" />
         <div className="skeleton h-20" />
+      </div>
+    </main>
+  );
+}
+
+export function ErrorScreen({ onRetry }: { onRetry?: () => void }) {
+  const router = useRouter();
+  return (
+    <main className="min-h-screen px-5 max-w-md mx-auto flex flex-col items-center justify-center text-center">
+      <div className="w-16 h-16 rounded-3xl bg-red-600/10 border border-red-600/20 text-red-400 flex items-center justify-center mb-5">
+        <Icon name="close" size={26} />
+      </div>
+      <h1 className="text-2xl font-bold tracking-tight">Couldn&apos;t load this page</h1>
+      <p className="text-zinc-500 mt-2">Check your connection and try again.</p>
+      <div className="grid grid-cols-2 gap-2 w-full mt-8">
+        <button onClick={onRetry ?? (() => window.location.reload())} className="btn btn-light h-12">Try Again</button>
+        <button onClick={() => router.push("/")} className="btn btn-ghost h-12">Go Home</button>
       </div>
     </main>
   );
