@@ -10,10 +10,14 @@ import {
   deleteExercise,
   getUserSettings,
   recordWorkoutCompletion,
-  getDay
+  getDay,
+  getWorkoutHistory
 } from "@/src/services/database";
 import { User } from "firebase/auth";
+import Link from "next/link";
 import { EmptyState, ErrorScreen, Icon, LoadingScreen, LoginScreen, PageHeader, Sheet } from "@/src/components/ui";
+import type { CardioActivity, ExerciseKind, LoggedExercise, LoggedSet, StrengthCategory } from "@/src/types/workout";
+import { CARDIO_ACTIVITIES, STRENGTH_CATEGORIES, estimateWorkoutCalories, guessCategory } from "@/src/utils/calories";
 // confetti import removed from top level to be imported dynamically
 
 const formatClock = (totalSeconds: number) => {
@@ -23,6 +27,129 @@ const formatClock = (totalSeconds: number) => {
   const mm = String(m).padStart(h ? 2 : 1, "0");
   return `${h ? `${h}:` : ""}${mm}:${String(s).padStart(2, "0")}`;
 };
+
+const isCardio = (ex: any) => ex?.kind === "cardio";
+const activityLabel = (a?: string) => CARDIO_ACTIVITIES.find(x => x.id === a)?.label || "Cardio";
+const hasIncline = (a?: string) => a === "walking" || a === "running";
+const formatSets = (sets: LoggedSet[]) => sets.map(s => `${s.weight}×${s.reps}`).join(" · ");
+const formatCardio = (c: { minutes?: number | null; distanceKm?: number | null; inclinePct?: number | null }) =>
+  [c.minutes ? `${c.minutes} min` : "", c.distanceKm ? `${c.distanceKm} km` : "", c.inclinePct ? `${c.inclinePct}% incline` : ""].filter(Boolean).join(" · ");
+
+const setInputClass = "w-full min-w-0 h-11 rounded-xl bg-black/40 border border-white/[0.08] text-center font-semibold tabular outline-none focus:border-red-500/60 placeholder:text-zinc-500";
+
+// --- ADD / EDIT FORM ---
+type Draft = {
+  kind: ExerciseKind;
+  name: string;
+  sets: string; reps: string; weight: string;
+  category: StrengthCategory | null;
+  activity: CardioActivity;
+  minutes: string; distanceKm: string; inclinePct: string;
+};
+
+const emptyDraft: Draft = {
+  kind: "strength", name: "", sets: "", reps: "", weight: "", category: null,
+  activity: "walking", minutes: "", distanceKm: "", inclinePct: ""
+};
+
+const str = (v: any) => (v === undefined || v === null ? "" : String(v));
+
+const toDraft = (ex: any): Draft => ({
+  kind: ex.kind || "strength",
+  name: ex.name || "",
+  sets: str(ex.sets), reps: str(ex.reps), weight: str(ex.weight),
+  category: ex.category ?? null,
+  activity: ex.activity || "walking",
+  minutes: str(ex.minutes), distanceKm: str(ex.distanceKm), inclinePct: str(ex.inclinePct)
+});
+
+// Firestore rejects undefined, so optional numbers are stored as null
+const toPayload = (d: Draft) => {
+  const opt = (v: string) => (Number(v) > 0 ? Number(v) : null);
+  if (d.kind === "cardio") {
+    return {
+      kind: "cardio" as const,
+      name: d.name.trim() || activityLabel(d.activity),
+      activity: d.activity,
+      minutes: Number(d.minutes) || 30,
+      distanceKm: opt(d.distanceKm),
+      inclinePct: hasIncline(d.activity) ? opt(d.inclinePct) : null,
+      sets: 1, reps: 0, weight: 0
+    };
+  }
+  return {
+    kind: "strength" as const,
+    name: d.name.trim(),
+    sets: Number(d.sets) || 3,
+    reps: Number(d.reps) || 10,
+    weight: Number(d.weight) || 0,
+    category: d.category
+  };
+};
+
+const canSave = (d: Draft) => d.kind === "cardio" || !!d.name.trim();
+
+const chipClass = (active: boolean) =>
+  `h-10 px-3 rounded-xl text-sm font-semibold transition-all active:scale-95 ${active
+    ? "bg-white text-black"
+    : "bg-white/[0.05] text-zinc-400 border border-white/[0.06]"}`;
+
+function ExerciseForm({ value, onChange, autoFocus }: { value: Draft; onChange: (d: Draft) => void; autoFocus?: boolean }) {
+  const set = (patch: Partial<Draft>) => onChange({ ...value, ...patch });
+  const category = value.category ?? guessCategory(value.name);
+
+  const field = (label: string, key: "sets" | "reps" | "weight" | "minutes" | "distanceKm" | "inclinePct", ph: string) => (
+    <label key={key} className="block">
+      <span className="text-xs font-medium text-zinc-500 ml-1">{label}</span>
+      <input type="number" inputMode="decimal" className="input mt-1 text-center tabular" placeholder={ph} value={value[key]} onChange={(e) => set({ [key]: e.target.value })} />
+    </label>
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-black/40 border border-white/[0.06]">
+        {(["strength", "cardio"] as const).map(k => (
+          <button key={k} type="button" onClick={() => set({ kind: k })} className={`h-10 rounded-xl text-sm font-semibold transition-all ${value.kind === k ? "bg-white/10 text-white" : "text-zinc-500"}`}>
+            {k === "strength" ? "Strength" : "Cardio"}
+          </button>
+        ))}
+      </div>
+
+      {value.kind === "strength" ? (
+        <>
+          <input autoFocus={autoFocus} className="input" placeholder="e.g. Bench Press" value={value.name} onChange={(e) => set({ name: e.target.value })} />
+          <div className="grid grid-cols-3 gap-2">
+            {field("Sets", "sets", "3")}
+            {field("Reps", "reps", "10")}
+            {field("Kg", "weight", "0")}
+          </div>
+          <div>
+            <span className="text-xs font-medium text-zinc-500 ml-1">Type <span className="text-zinc-600">· affects calorie estimate</span></span>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {STRENGTH_CATEGORIES.map(c => (
+                <button key={c.id} type="button" onClick={() => set({ category: c.id })} className={chipClass(category === c.id)}>{c.label}</button>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-4 gap-2">
+            {CARDIO_ACTIVITIES.map(a => (
+              <button key={a.id} type="button" onClick={() => set({ activity: a.id })} className={`${chipClass(value.activity === a.id)} !px-1 !text-xs`}>{a.label}</button>
+            ))}
+          </div>
+          <input className="input" placeholder={`Name (default: ${activityLabel(value.activity)})`} value={value.name} onChange={(e) => set({ name: e.target.value })} />
+          <div className={`grid gap-2 ${hasIncline(value.activity) ? "grid-cols-3" : "grid-cols-2"}`}>
+            {field("Minutes", "minutes", "30")}
+            {field("Km", "distanceKm", "—")}
+            {hasIncline(value.activity) && field("Incline %", "inclinePct", "0")}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function ExercisePage() {
   const { id, dayId } = useParams();
@@ -38,15 +165,21 @@ export default function ExercisePage() {
   const [dayName, setDayName] = useState("");
   const [isOwner, setIsOwner] = useState(false);
 
+  // Per-set values typed during the workout ("" or missing = use the suggestion)
+  const [setInputs, setSetInputs] = useState<{ [key: string]: { weight?: string; reps?: string } }>({});
+  const [cardioInputs, setCardioInputs] = useState<{ [exId: string]: { minutes?: string; distanceKm?: string; inclinePct?: string } }>({});
+  const [extraSets, setExtraSets] = useState<{ [exId: string]: number }>({});
+  // What was done for each exercise the last time this day was trained
+  const [lastSession, setLastSession] = useState<{ [exId: string]: LoggedExercise }>({});
+  const [bodyWeight, setBodyWeight] = useState<number | null>(null);
+  const [finishedKcal, setFinishedKcal] = useState<number | null>(null);
+
   // Form State
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [sets, setSets] = useState("");
-  const [reps, setReps] = useState("");
-  const [weight, setWeight] = useState("");
+  const [draft, setDraft] = useState<Draft>(emptyDraft);
 
   // Edit State
-  const [editingEx, setEditingEx] = useState<any | null>(null);
+  const [editingEx, setEditingEx] = useState<(Draft & { id: string }) | null>(null);
 
   const [isFinishing, setIsFinishing] = useState(false);
 
@@ -118,6 +251,9 @@ export default function ExercisePage() {
           return;
         }
         setCompletedSets(parsed.completedSets || {});
+        setSetInputs(parsed.setInputs || {});
+        setCardioInputs(parsed.cardioInputs || {});
+        setExtraSets(parsed.extraSets || {});
         setStartedAt(parsed.startedAt || Date.now());
         setIsWorkoutActive(true);
       }
@@ -128,17 +264,24 @@ export default function ExercisePage() {
     if (!isOwner) return;
     try {
       if (isWorkoutActive) {
-        localStorage.setItem(progressKey, JSON.stringify({ completedSets, startedAt }));
+        localStorage.setItem(progressKey, JSON.stringify({ completedSets, setInputs, cardioInputs, extraSets, startedAt }));
       }
     } catch { }
-  }, [isOwner, isWorkoutActive, completedSets, startedAt, progressKey]);
+  }, [isOwner, isWorkoutActive, completedSets, setInputs, cardioInputs, extraSets, startedAt, progressKey]);
 
   const clearProgress = () => {
     try { localStorage.removeItem(progressKey); } catch { }
   };
 
-  const startWorkout = () => {
+  const resetSession = () => {
     setCompletedSets({});
+    setSetInputs({});
+    setCardioInputs({});
+    setExtraSets({});
+  };
+
+  const startWorkout = () => {
+    resetSession();
     setStartedAt(Date.now());
     setElapsed(0);
     setIsWorkoutActive(true);
@@ -149,22 +292,42 @@ export default function ExercisePage() {
     const hasProgress = Object.values(completedSets).some(Boolean);
     if (hasProgress && !window.confirm("Cancel this workout? Your progress will be lost.")) return;
     clearProgress();
-    setCompletedSets({});
+    resetSession();
     setStartedAt(null);
     skipRest();
     setIsWorkoutActive(false);
   };
 
-  const loadExercises = useCallback(async (uid: string, pId: string, dId: string) => {
+  // Newest log of this day that contains each exercise (older logs have no exerciseId: match by name)
+  const loadLastSession = useCallback(async (uid: string, pId: string, dId: string, exList: any[]) => {
+    const { logs } = await getWorkoutHistory(uid, 30);
+    const found: { [exId: string]: LoggedExercise } = {};
+    for (const log of logs) {
+      if (log.programId !== pId || log.dayId !== dId) continue;
+      for (const ex of exList) {
+        if (found[ex.id]) continue;
+        const match = (log.exercises || []).find((l: LoggedExercise) =>
+          l.completedSets > 0 && (l.exerciseId ? l.exerciseId === ex.id : l.name === ex.name));
+        if (match) found[ex.id] = match;
+      }
+    }
+    setLastSession(found);
+  }, []);
+
+  const loadExercises = useCallback(async (uid: string, pId: string, dId: string, withHistory = false) => {
     const [data, day] = await Promise.all([
       getExercises(uid, pId, dId),
       getDay(uid, pId, dId)
     ]);
     setExercises(data);
+    if (withHistory) {
+      // Only suggestions: never fail the page over it
+      loadLastSession(uid, pId, dId, data).catch(error => console.error("Error loading last session:", error));
+    }
     if (day) {
       setDayName(day.name || day.title || "");
     }
-  }, []);
+  }, [loadLastSession]);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (u) => {
@@ -181,12 +344,13 @@ export default function ExercisePage() {
             // Load settings only for own workouts (in parallel with the exercises).
             // Settings are optional: fall back to defaults rather than failing the page
             const [, settings] = await Promise.all([
-              loadExercises(targetUserId, id as string, dayId as string),
+              loadExercises(targetUserId, id as string, dayId as string, u?.uid === targetUserId),
               u?.uid === targetUserId ? getUserSettings(targetUserId).catch(() => null) : Promise.resolve(null)
             ]);
             if (settings) {
               setRestTimerEnabled(settings.restTimerEnabled);
               setRestDuration(settings.restDuration);
+              setBodyWeight(Number(settings.bodyWeight) || null);
             }
           }
         }
@@ -201,29 +365,19 @@ export default function ExercisePage() {
   }, [id, dayId, loadExercises, userIdParam]);
 
   const handleAdd = async () => {
-    if (!user || !name.trim() || !id || !dayId) return;
-    await addExercise(user.uid, id as string, dayId as string, {
-      name: name.trim(),
-      sets: Number(sets) || 3,
-      reps: Number(reps) || 10,
-      weight: Number(weight) || 0
-    });
-    setName(""); setSets(""); setReps(""); setWeight("");
+    if (!user || !canSave(draft) || !id || !dayId) return;
+    await addExercise(user.uid, id as string, dayId as string, toPayload(draft));
+    setDraft(emptyDraft);
     setIsAddOpen(false);
-    loadExercises(user.uid, id as string, dayId as string);
+    loadExercises(user.uid, id as string, dayId as string, true);
   };
 
   const handleUpdate = async () => {
     if (!user || !editingEx || !id || !dayId) return;
     try {
-      await updateExercise(user.uid, id as string, dayId as string, editingEx.id, {
-        name: editingEx.name,
-        sets: Number(editingEx.sets),
-        reps: Number(editingEx.reps),
-        weight: Number(editingEx.weight)
-      });
+      await updateExercise(user.uid, id as string, dayId as string, editingEx.id, toPayload(editingEx));
       setEditingEx(null);
-      loadExercises(user.uid, id as string, dayId as string);
+      loadExercises(user.uid, id as string, dayId as string, true);
     } catch (error) {
       console.error("Update error:", error);
     }
@@ -234,21 +388,56 @@ export default function ExercisePage() {
     try {
       await deleteExercise(user.uid, id as string, dayId as string, exId);
       setEditingEx(null);
-      loadExercises(user.uid, id as string, dayId as string);
+      loadExercises(user.uid, id as string, dayId as string, true);
     } catch (error) {
       console.error("Delete error:", error);
     }
   };
 
-  const toggleSet = (exId: string, index: number) => {
-    const key = `${exId}-${index}`;
+  const setCountFor = (ex: any) => isCardio(ex) ? 1 : (Number(ex.sets) || 0) + (extraSets[ex.id] || 0);
+
+  // Suggested values for a set: what was typed, else last session's same set (unless the target
+  // weight was changed since), else the previous set, else the target
+  const effectiveSet = (ex: any, i: number): LoggedSet => {
+    const typed = setInputs[`${ex.id}-${i}`] || {};
+    const last = lastSession[ex.id];
+    const lastSet = last?.targetWeight === Number(ex.weight) ? last.sets?.[i] : undefined;
+    const base = lastSet || (i > 0 ? effectiveSet(ex, i - 1) : { weight: Number(ex.weight) || 0, reps: Number(ex.reps) || 0 });
+    return {
+      weight: typed.weight ? Number(typed.weight) : base.weight,
+      reps: typed.reps ? Number(typed.reps) : base.reps
+    };
+  };
+
+  const effectiveCardio = (ex: any) => {
+    const typed = cardioInputs[ex.id] || {};
+    const last = lastSession[ex.id];
+    const pick = (key: "minutes" | "distanceKm" | "inclinePct") =>
+      typed[key] ? Number(typed[key]) : Number(last?.[key] ?? ex[key]) || 0;
+    return { minutes: pick("minutes"), distanceKm: pick("distanceKm"), inclinePct: hasIncline(ex.activity) ? pick("inclinePct") : 0 };
+  };
+
+  const editSet = (key: string, field: "weight" | "reps", value: string) =>
+    setSetInputs(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
+
+  const editCardio = (exId: string, field: "minutes" | "distanceKm" | "inclinePct", value: string) =>
+    setCardioInputs(prev => ({ ...prev, [exId]: { ...prev[exId], [field]: value } }));
+
+  const toggleSet = (ex: any, index: number) => {
+    const key = `${ex.id}-${index}`;
     const isNowDone = !completedSets[key];
+
+    // Lock in the suggested numbers so later edits to earlier sets don't change this one
+    if (isNowDone && !isCardio(ex)) {
+      const eff = effectiveSet(ex, index);
+      setSetInputs(prev => ({ ...prev, [key]: { weight: String(eff.weight), reps: String(eff.reps) } }));
+    }
 
     setCompletedSets(prev => ({ ...prev, [key]: isNowDone }));
     navigator.vibrate?.(15);
 
     // Eğer set tamamlandıysa ve timer enabled ise timer'ı başlat
-    if (isNowDone && restTimerEnabled) {
+    if (isNowDone && restTimerEnabled && !isCardio(ex)) {
       setRestTime(restDuration);
       setRestTotal(restDuration);
       setRestEndsAt(Date.now() + restDuration * 1000);
@@ -256,23 +445,57 @@ export default function ExercisePage() {
     }
   };
 
-  const doneCountFor = (ex: any) =>
-    Array.from({ length: Number(ex.sets) || 0 }, (_, i) => completedSets[`${ex.id}-${i}`]).filter(Boolean).length;
+  const doneSetsFor = (ex: any) =>
+    Array.from({ length: setCountFor(ex) }, (_, i) => i).filter(i => completedSets[`${ex.id}-${i}`]);
+
+  const doneCountFor = (ex: any) => doneSetsFor(ex).length;
+
+  const estimateCalories = (seconds: number) => estimateWorkoutCalories({
+    bodyWeightKg: bodyWeight || 0,
+    sessionMinutes: seconds / 60,
+    strength: exercises.filter(ex => !isCardio(ex)).map(ex => ({
+      category: ex.category ?? guessCategory(ex.name),
+      sets: doneCountFor(ex)
+    })),
+    cardio: exercises.filter(ex => isCardio(ex) && doneCountFor(ex) > 0).map(ex => ({ activity: ex.activity, ...effectiveCardio(ex) }))
+  });
+
+  const logEntryFor = (ex: any): LoggedExercise => {
+    const done = doneSetsFor(ex);
+    if (isCardio(ex)) {
+      const c = effectiveCardio(ex);
+      return {
+        exerciseId: ex.id, name: ex.name, kind: "cardio", activity: ex.activity || "other",
+        completedSets: done.length,
+        minutes: done.length ? c.minutes : 0,
+        distanceKm: done.length && c.distanceKm ? c.distanceKm : null,
+        inclinePct: done.length && c.inclinePct ? c.inclinePct : null
+      };
+    }
+    const sets = done.map(i => effectiveSet(ex, i));
+    return {
+      exerciseId: ex.id, name: ex.name, kind: "strength",
+      category: ex.category ?? guessCategory(ex.name),
+      completedSets: sets.length,
+      weight: sets.length ? Math.max(...sets.map(s => s.weight)) : Number(ex.weight) || 0,
+      sets,
+      targetWeight: Number(ex.weight) || 0
+    };
+  };
 
   const handleFinishWorkout = async () => {
     if (!user || typeof id !== "string" || isFinishing) return;
     setIsFinishing(true);
 
+    const calories = estimateCalories(elapsed);
     const summary = {
       programId: id,
       dayId: dayId,
       dayName,
       durationSeconds: elapsed,
-      exercises: exercises.map(ex => ({
-        name: ex.name,
-        weight: ex.weight,
-        completedSets: doneCountFor(ex)
-      })),
+      exercises: exercises.map(logEntryFor),
+      calories,
+      bodyWeight: bodyWeight || null,
       completedAt: new Date()
     };
 
@@ -290,6 +513,7 @@ export default function ExercisePage() {
       }
       clearProgress();
       skipRest();
+      setFinishedKcal(calories);
 
       const confetti = (await import('canvas-confetti')).default;
       confetti({
@@ -314,10 +538,11 @@ export default function ExercisePage() {
   if (!user) return <LoginScreen />;
   if (loadError) return <ErrorScreen />;
 
-  const totalSets = exercises.reduce((sum, ex) => sum + (Number(ex.sets) || 0), 0);
+  const totalSets = exercises.reduce((sum, ex) => sum + setCountFor(ex), 0);
   const doneSets = exercises.reduce((sum, ex) => sum + doneCountFor(ex), 0);
   const progress = totalSets ? doneSets / totalSets : 0;
-  const totalVolume = exercises.reduce((sum, ex) => sum + (Number(ex.sets) || 0) * (Number(ex.reps) || 0) * (Number(ex.weight) || 0), 0);
+  const totalVolume = exercises.filter(ex => !isCardio(ex)).reduce((sum, ex) => sum + (Number(ex.sets) || 0) * (Number(ex.reps) || 0) * (Number(ex.weight) || 0), 0);
+  const liveKcal = isWorkoutActive ? estimateCalories(elapsed) : null;
 
   // Rest ring geometry
   const R = 22;
@@ -349,6 +574,9 @@ export default function ExercisePage() {
               <div className="h-full rounded-full bg-gradient-to-r from-red-600 to-orange-400 transition-all duration-500" style={{ width: `${progress * 100}%` }} />
             </div>
             <span className="text-xs font-semibold text-zinc-400 tabular">{doneSets}/{totalSets} sets</span>
+            {liveKcal !== null && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-orange-400 tabular"><Icon name="flame" size={12} /> ~{liveKcal} kcal</span>
+            )}
           </div>
         </header>
       )}
@@ -375,6 +603,11 @@ export default function ExercisePage() {
               <Icon name="play" size={18} /> Start Workout
             </button>
           )}
+          {isOwner && !bodyWeight && (
+            <p className="text-xs text-zinc-500 text-center mt-3">
+              <Link href="/settings" className="text-zinc-300 underline underline-offset-2">Add your body weight</Link> to see calories burned.
+            </p>
+          )}
         </section>
       )}
 
@@ -394,15 +627,17 @@ export default function ExercisePage() {
         <EmptyState
           icon="dumbbell"
           title="No exercises yet"
-          text={isOwner ? "Add the movements for this day with target sets, reps and weight." : "This day doesn't have any exercises yet."}
+          text={isOwner ? "Add lifts with target sets, reps and weight, or cardio like walking." : "This day doesn't have any exercises yet."}
           action={isOwner && <button onClick={() => setIsAddOpen(true)} className="btn btn-primary h-11 px-5 text-sm"><Icon name="plus" size={16} /> Add Exercise</button>}
         />
       ) : (
         <div className="space-y-3">
           {exercises.map((ex, exIndex) => {
-            const setCount = Number(ex.sets) || 0;
+            const setCount = setCountFor(ex);
             const done = doneCountFor(ex);
             const complete = setCount > 0 && done === setCount;
+            const cardio = isCardio(ex);
+            const last = lastSession[ex.id];
 
             return (
               <div
@@ -417,47 +652,118 @@ export default function ExercisePage() {
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-[17px] tracking-tight leading-snug">{ex.name}</h3>
                     <div className="flex flex-wrap gap-1.5 mt-2">
-                      <span className="text-xs font-medium text-zinc-300 bg-white/[0.06] rounded-full px-2.5 py-1 tabular">{ex.sets} × {ex.reps}</span>
-                      <span className="text-xs font-medium text-zinc-300 bg-white/[0.06] rounded-full px-2.5 py-1 tabular">{ex.weight} kg</span>
-                      {isWorkoutActive && (
+                      {cardio ? (
+                        <>
+                          <span className="text-xs font-medium text-sky-300 bg-sky-500/10 rounded-full px-2.5 py-1">{activityLabel(ex.activity)}</span>
+                          <span className="text-xs font-medium text-zinc-300 bg-white/[0.06] rounded-full px-2.5 py-1 tabular">{formatCardio(ex)}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs font-medium text-zinc-300 bg-white/[0.06] rounded-full px-2.5 py-1 tabular">{ex.sets} × {ex.reps}</span>
+                          <span className="text-xs font-medium text-zinc-300 bg-white/[0.06] rounded-full px-2.5 py-1 tabular">{ex.weight} kg</span>
+                        </>
+                      )}
+                      {isWorkoutActive && !cardio && (
                         <span className={`text-xs font-medium rounded-full px-2.5 py-1 tabular ${complete ? "bg-green-500/15 text-green-400" : "text-zinc-500"}`}>{done}/{setCount} done</span>
                       )}
                     </div>
+                    {last && (
+                      <p className="text-xs text-zinc-500 mt-2 tabular truncate">
+                        <span className="text-zinc-600">Last:</span> {cardio ? formatCardio(last) : last.sets?.length ? formatSets(last.sets) : `${last.completedSets} × ${last.weight} kg`}
+                      </p>
+                    )}
                   </div>
 
                   {!isWorkoutActive && isOwner && (
-                    <button onClick={() => setEditingEx(ex)} className="icon-btn !bg-transparent !border-transparent -mr-2 -mt-1" aria-label="Edit exercise">
+                    <button onClick={() => setEditingEx({ id: ex.id, ...toDraft(ex) })} className="icon-btn !bg-transparent !border-transparent -mr-2 -mt-1" aria-label="Edit exercise">
                       <Icon name="more" size={18} />
                     </button>
                   )}
                 </div>
 
-                {isWorkoutActive && (
-                  <div className="grid grid-cols-5 gap-2 mt-4">
+                {isWorkoutActive && !cardio && (
+                  <div className="mt-4 space-y-2">
                     {Array.from({ length: setCount }).map((_, i) => {
-                      const isDone = completedSets[`${ex.id}-${i}`];
+                      const key = `${ex.id}-${i}`;
+                      const isDone = completedSets[key];
+                      const typed = setInputs[key] || {};
+                      const eff = effectiveSet(ex, i);
                       return (
-                        <button
-                          key={i}
-                          onClick={() => toggleSet(ex.id, i)}
-                          aria-pressed={!!isDone}
-                          aria-label={`Set ${i + 1}`}
-                          className={`h-14 rounded-2xl flex flex-col items-center justify-center font-bold transition-all active:scale-90 ${isDone
-                            ? "bg-gradient-to-b from-red-500 to-red-700 text-white shadow-[0_6px_16px_-6px_rgba(239,68,68,0.8)] animate-check-pop"
-                            : "bg-white/[0.04] border border-white/[0.08] text-zinc-400"
-                            }`}
-                        >
-                          {isDone ? <Icon name="check" size={20} strokeWidth={3} /> : (
-                            <>
-                              <span className="text-base leading-none tabular">{i + 1}</span>
-                              <span className="text-[10px] font-medium text-zinc-600 mt-1 tabular">{ex.reps}×{ex.weight}</span>
-                            </>
-                          )}
-                        </button>
+                        <div key={i} className={`flex items-center gap-2 rounded-2xl p-1.5 pl-3 border transition-colors ${isDone ? "bg-red-600/10 border-red-500/25" : "bg-white/[0.03] border-white/[0.06]"}`}>
+                          <span className="w-4 text-sm font-bold tabular text-zinc-500">{i + 1}</span>
+                          <label className="flex-1 flex items-center gap-1.5 min-w-0">
+                            <input
+                              type="number" inputMode="decimal" step="0.5" aria-label={`Set ${i + 1} weight`}
+                              className={setInputClass} value={typed.weight ?? ""} placeholder={String(eff.weight)}
+                              onChange={(e) => editSet(key, "weight", e.target.value)}
+                            />
+                            <span className="text-xs text-zinc-500">kg</span>
+                          </label>
+                          <span className="text-zinc-600 text-sm">×</span>
+                          <label className="flex-1 flex items-center gap-1.5 min-w-0">
+                            <input
+                              type="number" inputMode="numeric" aria-label={`Set ${i + 1} reps`}
+                              className={setInputClass} value={typed.reps ?? ""} placeholder={String(eff.reps)}
+                              onChange={(e) => editSet(key, "reps", e.target.value)}
+                            />
+                            <span className="text-xs text-zinc-500">reps</span>
+                          </label>
+                          <button
+                            onClick={() => toggleSet(ex, i)}
+                            aria-pressed={!!isDone}
+                            aria-label={`Complete set ${i + 1}`}
+                            className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center transition-all active:scale-90 ${isDone
+                              ? "bg-gradient-to-b from-red-500 to-red-700 text-white shadow-[0_6px_16px_-6px_rgba(239,68,68,0.8)] animate-check-pop"
+                              : "bg-white/[0.06] border border-white/[0.08] text-zinc-500"
+                              }`}
+                          >
+                            <Icon name="check" size={18} strokeWidth={3} />
+                          </button>
+                        </div>
                       );
                     })}
+                    <button
+                      onClick={() => setExtraSets(prev => ({ ...prev, [ex.id]: (prev[ex.id] || 0) + 1 }))}
+                      className="w-full h-10 rounded-2xl text-xs font-semibold text-zinc-500 border border-dashed border-white/10 active:scale-[0.98] transition-transform"
+                    >
+                      + Add set
+                    </button>
                   </div>
                 )}
+
+                {isWorkoutActive && cardio && (() => {
+                  const isDone = completedSets[`${ex.id}-0`];
+                  const typed = cardioInputs[ex.id] || {};
+                  const eff = effectiveCardio(ex);
+                  const fields = [
+                    { field: "minutes" as const, label: "Min" },
+                    { field: "distanceKm" as const, label: "Km" },
+                    ...(hasIncline(ex.activity) ? [{ field: "inclinePct" as const, label: "Incline %" }] : [])
+                  ];
+                  return (
+                    <div className="mt-4 space-y-2">
+                      <div className={`grid gap-2 ${fields.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+                        {fields.map(f => (
+                          <label key={f.field} className="block">
+                            <span className="text-[11px] font-medium text-zinc-500 ml-1">{f.label}</span>
+                            <input
+                              type="number" inputMode="decimal"
+                              className={`${setInputClass} mt-1`} value={typed[f.field] ?? ""} placeholder={eff[f.field] ? String(eff[f.field]) : "—"}
+                              onChange={(e) => editCardio(ex.id, f.field, e.target.value)}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => toggleSet(ex, 0)}
+                        aria-pressed={!!isDone}
+                        className={`btn w-full h-12 text-sm ${isDone ? "btn-primary" : "btn-ghost"}`}
+                      >
+                        <Icon name="check" size={16} strokeWidth={3} /> {isDone ? "Done" : "Mark as done"}
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
@@ -498,50 +804,26 @@ export default function ExercisePage() {
             className={`btn w-full max-w-md h-14 text-base ${progress === 1 ? "btn-primary" : "btn-light"}`}
           >
             <Icon name="check" size={18} strokeWidth={2.5} />
-            {isFinishing ? 'Saving...' : progress === 1 ? 'Finish Workout' : `Finish Workout · ${Math.round(progress * 100)}%`}
+            {finishedKcal !== null ? `Saved · ~${finishedKcal} kcal burned` : isFinishing ? 'Saving...' : progress === 1 ? 'Finish Workout' : `Finish Workout · ${Math.round(progress * 100)}%`}
           </button>
         </div>
       )}
 
       {/* Add Exercise Sheet */}
       <Sheet open={isAddOpen} onClose={() => setIsAddOpen(false)} title="Add Exercise">
-        <form onSubmit={(e) => { e.preventDefault(); handleAdd(); }} className="space-y-3">
-          <input autoFocus className="input" placeholder="e.g. Bench Press" value={name} onChange={(e) => setName(e.target.value)} />
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: "Sets", value: sets, set: setSets, ph: "3" },
-              { label: "Reps", value: reps, set: setReps, ph: "10" },
-              { label: "Kg", value: weight, set: setWeight, ph: "0" },
-            ].map(f => (
-              <label key={f.label} className="block">
-                <span className="text-xs font-medium text-zinc-500 ml-1">{f.label}</span>
-                <input type="number" inputMode="decimal" className="input mt-1 text-center tabular" placeholder={f.ph} value={f.value} onChange={(e) => f.set(e.target.value)} />
-              </label>
-            ))}
-          </div>
-          <button type="submit" disabled={!name.trim()} className="btn btn-primary w-full h-12 !mt-5">Add to Routine</button>
+        <form onSubmit={(e) => { e.preventDefault(); handleAdd(); }}>
+          <ExerciseForm value={draft} onChange={setDraft} autoFocus />
+          <button type="submit" disabled={!canSave(draft)} className="btn btn-primary w-full h-12 mt-5">Add to Routine</button>
         </form>
       </Sheet>
 
       {/* Edit Exercise Sheet */}
       <Sheet open={!!editingEx} onClose={() => setEditingEx(null)} title="Edit Exercise">
         {editingEx && (
-          <form onSubmit={(e) => { e.preventDefault(); handleUpdate(); }} className="space-y-3">
-            <input
-              className="input"
-              value={editingEx.name}
-              onChange={(e) => setEditingEx({ ...editingEx, name: e.target.value })}
-            />
-            <div className="grid grid-cols-3 gap-2">
-              {(["sets", "reps", "weight"] as const).map(field => (
-                <label key={field} className="block">
-                  <span className="text-xs font-medium text-zinc-500 ml-1 capitalize">{field === "weight" ? "Kg" : field}</span>
-                  <input type="number" inputMode="decimal" className="input mt-1 text-center tabular" value={editingEx[field]} onChange={(e) => setEditingEx({ ...editingEx, [field]: e.target.value })} />
-                </label>
-              ))}
-            </div>
-            <div className="grid gap-2 !mt-5">
-              <button type="submit" className="btn btn-light h-12">Save Changes</button>
+          <form onSubmit={(e) => { e.preventDefault(); handleUpdate(); }}>
+            <ExerciseForm value={editingEx} onChange={(d) => setEditingEx({ ...d, id: editingEx.id })} />
+            <div className="grid gap-2 mt-5">
+              <button type="submit" disabled={!canSave(editingEx)} className="btn btn-light h-12">Save Changes</button>
               <button type="button" onClick={() => handleDelete(editingEx.id)} className="btn btn-danger h-12">
                 <Icon name="trash" size={16} /> Delete Exercise
               </button>

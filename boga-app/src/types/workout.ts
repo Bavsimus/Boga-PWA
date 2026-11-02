@@ -1,10 +1,42 @@
+export type ExerciseKind = "strength" | "cardio";
+export type StrengthCategory = "compound" | "isolation" | "bodyweight";
+export type CardioActivity = "walking" | "running" | "cycling" | "rowing" | "elliptical" | "stairs" | "other";
+
 export interface Exercise {
   id?: string;
   name: string;
-  targetSets: number;
-  targetReps: number;
-  targetWeight: number;
-  order: number;
+  kind?: ExerciseKind; // missing on older exercises = strength
+  // strength targets
+  sets: number;
+  reps: number;
+  weight: number;
+  category?: StrengthCategory; // missing = guessed from the name
+  // cardio targets
+  activity?: CardioActivity;
+  minutes?: number;
+  distanceKm?: number | null;
+  inclinePct?: number | null;
+}
+
+export interface LoggedSet {
+  weight: number;
+  reps: number;
+}
+
+// One exercise inside a finished workout log
+export interface LoggedExercise {
+  exerciseId?: string;
+  name: string;
+  kind?: ExerciseKind;
+  completedSets: number;
+  weight?: number; // heaviest weight used (older logs: the target weight)
+  sets?: LoggedSet[];
+  targetWeight?: number; // target at the time, so stale suggestions can be skipped
+  category?: StrengthCategory;
+  activity?: CardioActivity;
+  minutes?: number;
+  distanceKm?: number | null;
+  inclinePct?: number | null;
 }
 
 export interface TrainingDay {
@@ -25,6 +57,7 @@ export interface Program {
 export interface UserSettings {
   restTimerEnabled: boolean;
   restDuration: number; // in seconds
+  bodyWeight?: number; // kg, used for calorie estimates
 }
 
 export interface WorkoutCompletion {
