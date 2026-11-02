@@ -19,6 +19,7 @@ export default function SettingsPage() {
     // Settings state
     const [restTimerEnabled, setRestTimerEnabled] = useState(true);
     const [restDuration, setRestDuration] = useState(90);
+    const [bodyWeight, setBodyWeight] = useState("");
 
     // Profile state
     const [username, setUsername] = useState("");
@@ -39,6 +40,7 @@ export default function SettingsPage() {
                     ]);
                     setRestTimerEnabled(settings.restTimerEnabled);
                     setRestDuration(settings.restDuration);
+                    setBodyWeight(settings.bodyWeight ? String(settings.bodyWeight) : "");
                     if (profile) {
                         setUsername(profile.username || "");
                         setDisplayName(profile.displayName || u.displayName || "");
@@ -65,7 +67,8 @@ export default function SettingsPage() {
             await Promise.all([
                 updateUserSettings(user.uid, {
                     restTimerEnabled,
-                    restDuration: Math.min(600, Math.max(10, restDuration || 90))
+                    restDuration: Math.min(600, Math.max(10, restDuration || 90)),
+                    bodyWeight: Number(bodyWeight) > 0 ? Math.min(400, Number(bodyWeight)) : null
                 }),
                 updateUserProfile(user.uid, {
                     displayName: displayName.trim() || user.displayName || "BOGA User",
@@ -133,6 +136,33 @@ export default function SettingsPage() {
                                 <p className="text-sm text-zinc-500 mt-0.5">Let visitors browse your programs</p>
                             </div>
                             <Toggle checked={showPrograms} onChange={setShowPrograms} label="Show programs" />
+                        </div>
+                    </div>
+                </section>
+
+                {/* --- BODY --- */}
+                <section>
+                    <p className="eyebrow mb-3">Body</p>
+                    <div className="card p-5">
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <h3 className="font-semibold">Body weight</h3>
+                                <p className="text-sm text-zinc-500 mt-0.5">Used to estimate calories burned</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="20"
+                                    max="400"
+                                    placeholder="—"
+                                    value={bodyWeight}
+                                    onChange={(e) => setBodyWeight(e.target.value)}
+                                    className="input !w-20 !h-11 !px-2 text-center tabular font-bold"
+                                    aria-label="Body weight in kilograms"
+                                />
+                                <span className="text-sm text-zinc-500">kg</span>
+                            </div>
                         </div>
                     </div>
                 </section>

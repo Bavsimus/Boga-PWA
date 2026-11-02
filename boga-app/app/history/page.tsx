@@ -8,6 +8,15 @@ import { QueryDocumentSnapshot } from "firebase/firestore";
 
 const monthKey = (d: Date) => d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
+// Older logs only have a set count and one weight; newer ones list every set, or cardio stats
+const exerciseDetail = (ex: any) => {
+  if (ex.kind === "cardio") {
+    return [ex.minutes ? `${ex.minutes} min` : "", ex.distanceKm ? `${ex.distanceKm} km` : ""].filter(Boolean).join(" · ");
+  }
+  if (ex.sets?.length) return ex.sets.map((s: any) => `${s.weight}×${s.reps}`).join(" · ");
+  return `${ex.completedSets} × ${ex.weight} kg`;
+};
+
 export default function HistoryPage() {
   const [user, setUser] = useState<User | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
@@ -98,16 +107,17 @@ export default function HistoryPage() {
                             {date && <span className="tabular">{date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>}
                             <span className="flex items-center gap-1 tabular"><Icon name="check" size={12} /> {totalSets} sets</span>
                             {minutes && <span className="flex items-center gap-1 tabular"><Icon name="timer" size={12} /> {minutes} min</span>}
+                            {log.calories > 0 && <span className="flex items-center gap-1 tabular text-orange-400/90"><Icon name="flame" size={12} /> ~{log.calories} kcal</span>}
                           </div>
                         </div>
                       </div>
 
                       {log.exercises?.length > 0 && (
                         <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
-                          {log.exercises.map((ex: any, i: number) => (
-                            <div key={i} className="flex justify-between items-center gap-3 text-sm">
+                          {log.exercises.filter((ex: any) => ex.completedSets > 0).map((ex: any, i: number) => (
+                            <div key={i} className="flex justify-between items-baseline gap-3 text-sm">
                               <span className="text-zinc-300 truncate">{ex.name}</span>
-                              <span className="text-zinc-500 tabular shrink-0">{ex.completedSets} × {ex.weight} kg</span>
+                              <span className="text-zinc-500 tabular text-right">{exerciseDetail(ex)}</span>
                             </div>
                           ))}
                         </div>

@@ -4,6 +4,7 @@ import {
   startAfter, where, Timestamp, getCountFromServer, doc, updateDoc, deleteDoc, QueryDocumentSnapshot,
   getDocsFromServer, getDocsFromCache, getDocFromServer, getDocFromCache, Query, DocumentReference
 } from "firebase/firestore";
+import type { UserSettings } from "@/src/types/workout";
 
 // --- RESILIENT READS ---
 // On flaky mobile connections (e.g. iOS resuming the PWA from background) a plain read can hang
@@ -179,16 +180,16 @@ export const getWorkoutHistory = async (userId: string, pageSize: number = 20, c
 };
 
 // --- USER SETTINGS ---
-export const getUserSettings = async (userId: string) => {
+export const getUserSettings = async (userId: string): Promise<UserSettings> => {
 
   const settingsRef = doc(db, "users", userId, "settings", "preferences");
   const settingsSnap = await readDoc(settingsRef);
 
   if (settingsSnap.exists()) {
-    return settingsSnap.data();
+    return settingsSnap.data() as UserSettings;
   } else {
     // Return default settings if none exist
-    const defaultSettings = {
+    const defaultSettings: UserSettings = {
       restTimerEnabled: true,
       restDuration: 90
     };
@@ -198,7 +199,7 @@ export const getUserSettings = async (userId: string) => {
   }
 };
 
-export const updateUserSettings = async (userId: string, settings: { restTimerEnabled: boolean; restDuration: number }) => {
+export const updateUserSettings = async (userId: string, settings: { restTimerEnabled: boolean; restDuration: number; bodyWeight?: number | null }) => {
 
   const settingsRef = doc(db, "users", userId, "settings", "preferences");
   return await setDoc(settingsRef, settings, { merge: true });
